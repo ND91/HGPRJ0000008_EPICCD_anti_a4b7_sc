@@ -1,0 +1,5 @@
+TypeError in line 16 of /mnt/smb/ltytgat/ayliyim/Exchange/Research Exchange/Marte Becker/RNAseq/src/rnaseq_pipeline/workflow/Snakefile:
+join() argument must be str, bytes, or os.PathLike object, not 'Index'
+  File "/mnt/smb/ltytgat/ayliyim/Exchange/Research Exchange/Marte Becker/RNAseq/src/rnaseq_pipeline/workflow/Snakefile", line 16, in <module>
+  File "/mnt/nfs/kgres/home/andrewliyim/local/miniconda3/envs/snakemake/lib/python3.9/posixpath.py", line 90, in join
+  File "/mnt/nfs/kgres/home/andrewliyim/local/miniconda3/envs/snakemake/lib/python3.9/genericpath.py", line 152, in _check_arg_types

@@ -1,0 +1,4 @@
+SyntaxError:
+Not all output, log and benchmark files of rule fastqc contain the same wildcards. This is crucial though, in order to avoid that two or more jobs write to the same file.
+  File "/mnt/smb/ltytgat/ayliyim/Exchange/Research Exchange/Marte Becker/RNAseq/src/rnaseq_pipeline/workflow/Snakefile", line 5, in <module>
+  File "/mnt/smb/ltytgat/ayliyim/Exchange/Research Exchange/Marte Becker/RNAseq/src/rnaseq_pipeline/workflow/rules/fastqc.smk", line 18, in <module>

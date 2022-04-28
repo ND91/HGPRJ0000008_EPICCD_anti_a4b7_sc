@@ -1,0 +1,49 @@
+import pandas as pd
+
+# Rules
+		
+#include: "rules/fastqc.smk"
+#include: "rules/staralign.smk"
+#include: "rules/featurecount.smk"
+
+configfile: "config/config.yaml"
+
+sample_metadata = pd.read_excel(config["sample_metadata"]).set_index("Sample_ID", drop=False)
+sampleID = sample_metadata.index
+#print(config["fastqdir"] + "/" + sampleID + "_R1.fastq.gz")
+
+# Targets
+
+#rule all:
+#    input:
+#        expand(
+#            
+#        ),
+
+rule fastqc:
+	input:
+		fastq_r1=config["fastqdir"] + "/{sampleID}_R1.fastq.gz",
+		fastq_r2=config["fastqdir"] + "/{sampleID}_R2.fastq.gz",
+	output:
+		fastqcdir=directory(config["outputdir"]+ "/fastqc/{sampleID}/"),
+		fastqchtml=config["outputdir"] + "/fastqc/{sampleID}/{sampleID}.html",
+		fastqczip=config["outputdir"] + "/fastqc/{sampleID}/{sampleID}.zip",
+	log:
+		"output/fastqc/{sampleID}/{sampleID}_fastqc.log",
+	threads: 
+		8
+	benchmark:
+		"output/fastqc/{sampleID}/{sampleID}_benchmark.txt",
+	params:
+		sampleID="{sampleID}"
+	shell:
+		"""
+		#mkdir -p {output.fastqcdir}
+		
+		#fastqc --outdir={output.fastqcdir} --threads {threads} {input} &> {log}
+		
+		echo {output.fastqcdir}
+		echo {threads}
+		echo {input}
+		echo {log}
+		"""

@@ -1,0 +1,3 @@
+IndexError in line 11 of /mnt/smb/ltytgat/ayliyim/Exchange/Research Exchange/Marte Becker/RNAseq/src/rnaseq_pipeline/workflow/Snakefile:
+tuple index out of range
+  File "/mnt/smb/ltytgat/ayliyim/Exchange/Research Exchange/Marte Becker/RNAseq/src/rnaseq_pipeline/workflow/Snakefile", line 11, in <module>

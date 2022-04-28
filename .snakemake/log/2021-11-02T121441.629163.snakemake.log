@@ -1,0 +1,4 @@
+KeyError in line 3 of /mnt/smb/ltytgat/ayliyim/Exchange/Research Exchange/Marte Becker/RNAseq/src/rnaseq_pipeline/workflow/rules/fastqc.smk:
+'fastq'
+  File "/mnt/smb/ltytgat/ayliyim/Exchange/Research Exchange/Marte Becker/RNAseq/src/rnaseq_pipeline/workflow/Snakefile", line 5, in <module>
+  File "/mnt/smb/ltytgat/ayliyim/Exchange/Research Exchange/Marte Becker/RNAseq/src/rnaseq_pipeline/workflow/rules/fastqc.smk", line 3, in <module>

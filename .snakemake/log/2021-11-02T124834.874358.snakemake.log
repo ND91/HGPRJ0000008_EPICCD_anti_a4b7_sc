@@ -1,0 +1,3 @@
+CreateRuleException in line 18 of /mnt/smb/ltytgat/ayliyim/Exchange/Research Exchange/Marte Becker/RNAseq/src/rnaseq_pipeline/workflow/Snakefile:
+The name fastqc is already used by another rule
+  File "/mnt/smb/ltytgat/ayliyim/Exchange/Research Exchange/Marte Becker/RNAseq/src/rnaseq_pipeline/workflow/Snakefile", line 18, in <module>
