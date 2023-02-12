@@ -1,0 +1,11 @@
+channels:
+  - bioconda      
+  - conda-forge
+  - anaconda
+  - defaults
+dependencies:
+  - libcurl=7.87.0
+  - r-base=4.2.2
+  - r-curl=4.3.3
+  - r-devtools=2.4.5
+  - bioconductor-rhdf5=2.42.0

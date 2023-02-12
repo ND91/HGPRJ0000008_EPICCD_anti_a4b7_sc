@@ -1,0 +1,246 @@
+---
+title: "Demultiplex 20191122-SCS14"
+author: "Andrew Y.F. Li Yim"
+date: '2022-07-21'
+output: html_document
+---
+
+The goal of this document is to show how we demultiplexed the hashtags from experiment 20191122-SCS14. While we expect that rerunning this notebook should by-and-large yield the same annotations, we cannot guarantee that all cells will be given the same annotations given the stochastic nature of some steps. Accordingly, the result of our own demultiplexing run has been placed in the `config/annotations/demultiplexed.csv` for subsequent integration. 
+
+```{r libraries, include=FALSE}
+require(Seurat)
+require(ggplot2)
+require(ggrastr)
+require(GGally)
+require(ggpubr)
+require(ggrastr)
+require(Cairo)
+require(dplyr)
+require(tidyr)
+require(plotly)
+```
+
+```{r setup}
+seurat_RDS_path <- file.path("..", "..", "..", "output", "scrnaseq", "normalized", "20191122-SCS14_normalized_SeuratObject.Rds")
+seurat_demux_csv_path <- file.path("..", "..", "..", "output", "cell_metadata", "sample_demultiplex", "20191122-SCS14_demultiplex.csv")
+```
+
+```{r import}
+seuratObject <- readRDS(seurat_RDS_path)
+```
+
+# Seurat::HTODemux
+
+```{r automatic demultiplexing, fig.width = 10, fig.height = 10}
+seuratObject <- NormalizeData(seuratObject, assay = "HTO", normalization.method = "CLR", margin = 1)
+seuratObject <- HTODemux(seuratObject, assay = "HTO", positive.quantile = 0.99)
+
+DefaultAssay(seuratObject) <- "HTO"
+Idents(seuratObject) <- "hash.ID"
+
+seuratObject@meta.data$SampleID <- seuratObject@meta.data$hash.ID
+
+nhtos <- nrow(GetAssayData(seuratObject, assay = "HTO"))
+
+ggpairs(data.frame(t(GetAssayData(seuratObject, assay = "HTO")), seuratObject@meta.data), 
+                      columns = 1:nhtos, 
+                      aes(col = hash.ID)) +
+  theme_bw()
+```
+
+```{r frequencies seurat demultiplex}
+table(seuratObject@meta.data$hash.ID)
+```
+
+Seurat's default classification of cells identifies a lot of multiplets This seems rather higher suggesting that 4335/18090*100=24% of the captured cells are multiplets. While this may be true, I feel that Seurat may be overzealous in identifying doublets. 
+
+```{r HTOs F291 F334, fig.width = 8, fig.height = 7}
+data.frame(t(GetAssayData(seuratObject, assay = "HTO")), seuratObject@meta.data) %>%
+  ggplot(aes(x = F291, y = F334, col = hash.ID)) +
+  geom_point_rast() +
+  theme_bw()
+```
+
+The figure above indicates that while there are still many apparent multiplets, overplotting in the figure previously clouded our intial judgment. 
+
+# K-means clustering + manual
+
+I will utilize K-means clustering to see whether I can approach a better clustering result. We assume that we have 10 classes (8 HTOs, negatives, and multiplets).
+
+```{r kmeans pass 1, fig.width=15, fig.height=15}
+set.seed(69182473)
+
+seuratObject_hto <- data.frame(t(GetAssayData(seuratObject, assay = "HTO")))
+
+seuratObject_hto_km <- kmeans(seuratObject_hto, centers = 10, nstart = 100, iter.max=500)
+
+seuratObject_hto$kmc <- seuratObject_hto_km$cluster
+
+ggpairs(seuratObject_hto, 
+        columns = 1:nhtos, 
+        aes(col = as.factor(kmc))) +
+  theme_bw()
+```
+
+By and large, we find the following clusters to represent the following classes:
+1: F213
+2: F216
+3: Negative
+4: F285
+5: F223
+6: F140
+7: F223
+8: F200
+9: F334
+10: F291
+
+While the clusters appear cleaner (i.e. a more uniform color), I feel that the multiplets are not resolved by an individual cluster, with practically all clusters presenting some degree of multiplets. In addition, we find that clusters 5 and 7 both represent F223. Taken together, some improvement is necessary. 
+
+```{r HTOs F140 F285, fig.width = 8, fig.height = 7}
+data.frame(seuratObject_hto, seuratObject@meta.data) %>%
+  ggplot(aes(x = F213, y = F216, col = as.factor(kmc))) +
+  geom_vline(xintercept = 2.5) +
+  geom_hline(yintercept = 2.5) +
+  geom_point_rast() +
+  theme_bw()
+```
+
+Here, I would draw the signal for F213 at 2.5 and therefore F216 also 2.5.
+
+```{r HTOs F213 F285, fig.width = 8, fig.height = 7}
+data.frame(seuratObject_hto_reannotated, seuratObject@meta.data) %>%
+  ggplot(aes(x = F213, y = F285, col = as.factor(kmc))) +
+  geom_vline(xintercept = 2.5) +
+  geom_hline(yintercept = 2.5) +
+  geom_point_rast() +
+  theme_bw()
+```
+
+```{r HTOs F213 F223, fig.width = 8, fig.height = 7}
+data.frame(seuratObject_hto_reannotated, seuratObject@meta.data) %>%
+  ggplot(aes(x = F213, y = F223, col = as.factor(kmc))) +
+  geom_vline(xintercept = 2.5) +
+  geom_hline(yintercept = 2) +
+  geom_point_rast() +
+  theme_bw()
+```
+
+```{r HTOs F213 F140, fig.width = 8, fig.height = 7}
+data.frame(seuratObject_hto_reannotated, seuratObject@meta.data) %>%
+  ggplot(aes(x = F213, y = F140, col = as.factor(kmc))) +
+  geom_vline(xintercept = 2.5) +
+  geom_hline(yintercept = 1.5) +
+  geom_point_rast() +
+  theme_bw()
+```
+
+```{r HTOs F213 F200, fig.width = 8, fig.height = 7}
+data.frame(seuratObject_hto_reannotated, seuratObject@meta.data) %>%
+  ggplot(aes(x = F213, y = F200, col = as.factor(kmc))) +
+  geom_vline(xintercept = 2.5) +
+  geom_hline(yintercept = 2.1) +
+  geom_point_rast() +
+  theme_bw()
+```
+
+```{r HTOs F213 F334, fig.width = 8, fig.height = 7}
+data.frame(seuratObject_hto_reannotated, seuratObject@meta.data) %>%
+  ggplot(aes(x = F213, y = F334, col = as.factor(kmc))) +
+  geom_vline(xintercept = 2.5) +
+  geom_hline(yintercept = 2) +
+  geom_point_rast() +
+  theme_bw()
+```
+
+```{r HTOs F213 F291, fig.width = 8, fig.height = 7}
+data.frame(seuratObject_hto_reannotated, seuratObject@meta.data) %>%
+  ggplot(aes(x = F213, y = F291, col = as.factor(kmc))) +
+  geom_vline(xintercept = 2.5) +
+  geom_hline(yintercept = 2) +
+  geom_point_rast() +
+  theme_bw()
+```
+
+```{r HTOs F216 F285, fig.width = 8, fig.height = 7}
+data.frame(seuratObject_hto_reannotated, seuratObject@meta.data) %>%
+  ggplot(aes(x = F216, y = F285, col = as.factor(kmc))) +
+  geom_vline(xintercept = 2.5) +
+  geom_hline(yintercept = 2.5) +
+  geom_point_rast() +
+  theme_bw()
+```
+
+```{r HTOs F216 F223, fig.width = 8, fig.height = 7}
+data.frame(seuratObject_hto_reannotated, seuratObject@meta.data) %>%
+  ggplot(aes(x = F216, y = F223, col = as.factor(kmc))) +
+  geom_vline(xintercept = 2.5) +
+  geom_hline(yintercept = 2) +
+  geom_point_rast() +
+  theme_bw()
+```
+
+# Integration
+
+```{r reintegrate samples}
+seuratObject_hto_reannotated <- seuratObject_hto %>%
+  dplyr::mutate(SampleID = kmc,
+                SampleID = ifelse(SampleID %in% 1, "F213", SampleID),
+                SampleID = ifelse(SampleID %in% 2, "F216", SampleID),
+                SampleID = ifelse(SampleID %in% 3, "Negative", SampleID),
+                SampleID = ifelse(SampleID %in% 4, "F285", SampleID),
+                SampleID = ifelse(SampleID %in% c(5, 7), "F223", SampleID),
+                SampleID = ifelse(SampleID %in% c(6), "F140", SampleID),
+                SampleID = ifelse(SampleID %in% c(8), "F200", SampleID),
+                SampleID = ifelse(SampleID %in% c(9), "F334", SampleID),
+                SampleID = ifelse(SampleID %in% c(10), "F291", SampleID),
+                SampleID = ifelse(SampleID %in% c("F213", "F216") & F213>2.5 & F216>2.5, "Multiplets", SampleID),
+                SampleID = ifelse(SampleID %in% c("F213", "F285") & F213>2.5 & F285>2.5, "Multiplets", SampleID),
+                SampleID = ifelse(SampleID %in% c("F213", "F223") & F213>2.5 & F223>2, "Multiplets", SampleID),
+                SampleID = ifelse(SampleID %in% c("F213", "F140") & F213>2.5 & F140>1.5, "Multiplets", SampleID),
+                SampleID = ifelse(SampleID %in% c("F213", "F200") & F213>2.5 & F200>2.1, "Multiplets", SampleID),
+                SampleID = ifelse(SampleID %in% c("F213", "F334") & F213>2.5 & F334>2, "Multiplets", SampleID),
+                SampleID = ifelse(SampleID %in% c("F213", "F291") & F213>2.5 & F291>2, "Multiplets", SampleID),
+                SampleID = ifelse(SampleID %in% c("F216", "F285") & F216>2.5 & F285>2.5, "Multiplets", SampleID),
+                SampleID = ifelse(SampleID %in% c("F216", "F223") & F216>2.5 & F223>2, "Multiplets", SampleID),
+                SampleID = ifelse(SampleID %in% c("F216", "F140") & F216>2.5 & F140>1.5, "Multiplets", SampleID),
+                SampleID = ifelse(SampleID %in% c("F216", "F200") & F216>2.5 & F200>2.1, "Multiplets", SampleID),
+                SampleID = ifelse(SampleID %in% c("F216", "F334") & F216>2.5 & F334>2, "Multiplets", SampleID),
+                SampleID = ifelse(SampleID %in% c("F216", "F291") & F216>2.5 & F291>2, "Multiplets", SampleID),
+                SampleID = ifelse(SampleID %in% c("F285", "F223") & F285>2.5 & F223>2, "Multiplets", SampleID),
+                SampleID = ifelse(SampleID %in% c("F285", "F140") & F285>2.5 & F140>1.5, "Multiplets", SampleID),
+                SampleID = ifelse(SampleID %in% c("F285", "F200") & F285>2.5 & F200>2.1, "Multiplets", SampleID),
+                SampleID = ifelse(SampleID %in% c("F285", "F334") & F285>2.5 & F334>2.1, "Multiplets", SampleID),
+                SampleID = ifelse(SampleID %in% c("F285", "F291") & F285>2.5 & F291>2.1, "Multiplets", SampleID),
+                SampleID = ifelse(SampleID %in% c("F223", "F140") & F223>2 & F140>1.5, "Multiplets", SampleID),
+                SampleID = ifelse(SampleID %in% c("F223", "F200") & F223>2 & F200>2.1, "Multiplets", SampleID),
+                SampleID = ifelse(SampleID %in% c("F223", "F334") & F223>2 & F334>2, "Multiplets", SampleID),
+                SampleID = ifelse(SampleID %in% c("F223", "F291") & F223>2 & F291>2, "Multiplets", SampleID),
+                SampleID = ifelse(SampleID %in% c("F140", "F200") & F140>1.5 & F200>2.1, "Multiplets", SampleID),
+                SampleID = ifelse(SampleID %in% c("F140", "F334") & F140>1.5 & F334>2, "Multiplets", SampleID),
+                SampleID = ifelse(SampleID %in% c("F140", "F291") & F140>1.5 & F291>2, "Multiplets", SampleID),
+                SampleID = ifelse(SampleID %in% c("F200", "F334") & F200>2.1 & F334>2, "Multiplets", SampleID),
+                SampleID = ifelse(SampleID %in% c("F200", "F291") & F200>2.1 & F291>2, "Multiplets", SampleID),
+                SampleID = ifelse(SampleID %in% c("F334", "F291") & F334>2 & F291>2, "Multiplets", SampleID))
+
+prop.table(table(seuratObject_hto_reannotated$SampleID))
+```
+
+Where the automatic Seurat demultiplexing tool annotated many cells as multiplets, the manual approach indicates they are obtained from a single individual. That being said, a substantially higher number of negatives are found. We will adopt an opportunistic approach here we we will adopt the annotations of Seurat if our manual approach found them to be negative.
+
+```{r integrate annotations seuratobject}
+demultiplexed <- data.frame(CB = rownames(seuratObject_hto_reannotated), 
+                            Seurat_demux_ID = as.character(seuratObject@meta.data$hash.ID),
+                            SampleID = seuratObject_hto_reannotated$SampleID) %>%
+  dplyr::mutate(SampleID = ifelse(SampleID == "Negative", Seurat_demux_ID, SampleID),
+                SampleID = gsub("Doublet", "Multiplets", SampleID))
+```
+
+## Save data
+
+```{r save data}
+data.table::fwrite(demultiplexed, seurat_demux_csv_path)
+```
+
+```{r sessionInfo}
+sessionInfo()
+```

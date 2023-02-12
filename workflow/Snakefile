@@ -1,49 +1,79 @@
 import pandas as pd
-
-# Rules
-		
-#include: "rules/fastqc.smk"
-#include: "rules/staralign.smk"
-#include: "rules/featurecount.smk"
+import re
+import os
 
 configfile: "config/config.yaml"
 
-sample_metadata = pd.read_excel(config["sample_metadata"]).set_index("Sample_ID", drop=False)
-sampleID = sample_metadata.index
-#print(config["fastqdir"] + "/" + sampleID + "_R1.fastq.gz")
+# Sample metadata
+sample_metadata_df = pd.read_excel(config['sample_metadata'], header=0)
 
-# Targets
+sampleIDs = sample_metadata_df['Sample_ID'].tolist()
 
-#rule all:
-#    input:
-#        expand(
-#            
-#        ),
+# PBMC scrnaseq files
+scrnaseq_files_df = pd.read_excel(config['scrnaseq_files'], header=0)
 
-rule fastqc:
-	input:
-		fastq_r1=config["fastqdir"] + "/{sampleID}_R1.fastq.gz",
-		fastq_r2=config["fastqdir"] + "/{sampleID}_R2.fastq.gz",
-	output:
-		fastqcdir=directory(config["outputdir"]+ "/fastqc/{sampleID}/"),
-		fastqchtml=config["outputdir"] + "/fastqc/{sampleID}/{sampleID}.html",
-		fastqczip=config["outputdir"] + "/fastqc/{sampleID}/{sampleID}.zip",
-	log:
-		"output/fastqc/{sampleID}/{sampleID}_fastqc.log",
-	threads: 
-		8
-	benchmark:
-		"output/fastqc/{sampleID}/{sampleID}_benchmark.txt",
-	params:
-		sampleID="{sampleID}"
-	shell:
-		"""
-		#mkdir -p {output.fastqcdir}
-		
-		#fastqc --outdir={output.fastqcdir} --threads {threads} {input} &> {log}
-		
-		echo {output.fastqcdir}
-		echo {threads}
-		echo {input}
-		echo {log}
-		"""
+scrnaseq_fastq_basenames = pd.Series(pd.concat([scrnaseq_files_df['Basename_fastq'], scrnaseq_files_df['Basename_fbc_fastq']]), name = 'files')
+scrnaseq_fastq_basenames = scrnaseq_fastq_basenames[scrnaseq_fastq_basenames.notna()]
+
+scrnaseq_fastq_df = pd.concat({'old_path' : scrnaseq_fastq_basenames,
+                               'file' : scrnaseq_fastq_basenames.apply(lambda x: os.path.basename(x))},
+                              axis=1)
+
+scrnaseq_fastq_df = scrnaseq_fastq_df.drop_duplicates()
+scrnaseq_fastq_fns = scrnaseq_fastq_df['file'].tolist()
+
+run_fbcs = pd.Series(scrnaseq_files_df['Run_ID'].unique()).tolist()
+
+scrnaseq_files_df['Well10X_str'] = scrnaseq_files_df['Well10X'].astype(str)
+
+lookup_fbc = pd.DataFrame(list(zip(scrnaseq_files_df['Run_ID'],
+                                   scrnaseq_files_df[['Run_ID', 'Well10X_str']].agg('-'.join, axis=1))),
+                          columns = ['Run', 'Run_well']).drop_duplicates()
+
+# CD14+ monocyte brnaseq files
+brnaseq_files_df = pd.read_excel(config['brnaseq_files'], header=0)
+
+brnaseq_filedata = pd.concat([pd.Series(pd.concat([brnaseq_files_df['Basename'].astype(str) + '_R1', brnaseq_files_df['Basename'].astype(str) + '_R2', brnaseq_files_df['Basename'].astype(str) + '_UMI']), name = 'old_path'), 
+                              pd.Series(pd.concat([brnaseq_files_df['Sample_ID'].astype(str) + '_R1', brnaseq_files_df['Sample_ID'].astype(str) + '_R2', brnaseq_files_df['Sample_ID'].astype(str) + '_UMI']), name = 'new_path')], 
+                             axis=1)
+  
+brnaseq_read_files = brnaseq_filedata['new_path'].tolist()
+
+basedir = config['base_dir']
+
+# Rules
+include: "rules/general.smk"
+include: "rules/scrnaseq.smk"
+include: "rules/masscytometry.smk"
+include: "rules/figures.smk"
+#include: "rules/brnaseq.smk"
+
+wildcard_constraints:
+  scrnaseq_fastq_fn='|'.join([re.escape(x) for x in scrnaseq_fastq_fns]),
+  run_fbc='|'.join([re.escape(x) for x in run_fbcs]),
+
+rule all:
+  input:
+    ##scRNAseq
+    #expand("resources/scrnaseq/fastq/{scrnaseq_fastq_fn}", scrnaseq_fastq_fn=scrnaseq_fastq_fns),
+    #"resources/scrnaseq/reference_genome",
+    #expand("output/scrnaseq/cellranger/{run_fbc}/outs/filtered_feature_bc_matrix", run_fbc=run_fbcs)
+    #expand("{basedir}/output/scrnaseq/normalized/{run_fbc}_normalized_SeuratObject.Rds", basedir=basedir, run_fbc=run_fbcs)
+    #expand("{basedir}/output/scrnaseq/cell_metadata/annotated_SeuratObject.Rds", basedir=basedir),
+    #expand("{basedir}/output/scrnaseq/clustered/clustered_SeuratObject.Rds", basedir=basedir),
+    #expand("{basedir}/output/scrnaseq/da/dacs.csv", basedir=basedir),
+    #expand("{basedir}/output/scrnaseq/de/degs.Rds", basedir=basedir),
+    expand("{basedir}/output/figures/scrnaseq_umap_pbmc.pdf", basedir=basedir),
+    expand("{basedir}/output/figures/scrnaseq_dotplot_markers.pdf", basedir=basedir),
+    expand("{basedir}/output/figures/scrnaseq_boxplot_abundance_l3rl0.pdf", basedir=basedir),
+    expand("{basedir}/output/figures/scrnaseq_arrowplot_degs.pdf", basedir=basedir),
+    ##Mass cytometry
+    expand("{basedir}/output/masscytometry/da/dacs.csv", basedir=basedir),
+    expand("{basedir}/output/masscytometry/cell_metadata/sce_annotated.Rds", basedir=basedir),
+    expand("{basedir}/output/masscytometry/clustered/sce_clustered.Rds", basedir=basedir),
+    ##CD14+ monocyte bulk RNAseq
+    #expand("{basedir}/output/brnaseq/fastqc/{readfile}/{readfile}_fastqc.zip", readfile=readfiles),
+    #expand("{basedir}/output/brnaseq/bam/{sampleID}/{sampleID}_filtered_deduplicated.bam.bai", sampleID=sampleIDs),
+    #"{basedir}/output/brnaseq/bam/STAR.log",
+    #"{basedir}/output/brnaseq/counts/counts.txt",
+    #"{basedir}/output/brnaseq/multiqc"

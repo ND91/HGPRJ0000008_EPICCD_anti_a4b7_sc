@@ -1,0 +1,519 @@
+---
+title: "Celltype annotation 20191122-SCS14"
+author: "Andrew Y.F. Li Yim"
+date: '2022-10-11'
+output: html_document
+---
+
+The goal of this document is to show how we added several cell-specific annotations, such as the mitochondrialpercentage mitochondrial reads, the cellcycle status as well as the celltypes to experiment 20191122-SCS14. While we expect that rerunning this notebook should by-and-large yield the same annotations, we cannot guarantee that all cells will be given the same annotations given the stochastic nature of some steps. Accordingly, the result of our own demultiplexing run has been placed in the `config/annotations/celltypes.csv` for subsequent integration. 
+
+```{r libraries}
+require(Seurat)
+```
+
+```{r setup, include=FALSE}
+seurat_rds_path <- "output/scrnaseq/normalized/{run_fbc}_normalized_SeuratObject.Rds"
+reference_rds_path <- "resources/scrnaseq/reference_data/pbmc_multimodal.Rds"
+```
+
+```{r import}
+seuratObject <- readRDS(seurat_rds_path)
+```
+
+## Mitochondrial reads
+
+```{r mitochondial reads}
+seuratObject[["percent_MT"]] <- PercentageFeatureSet(seuratObject, pattern = "^MT-")
+```
+
+## Cellcycle status
+
+```{r cell cycle status}
+cc_genes_present <- list(
+  s_genes = cc.genes.updated.2019$s.genes[which(cc.genes.updated.2019$s.genes %in% rownames(seuratObject))],
+  g2m_genes = cc.genes.updated.2019$g2m.genes[which(cc.genes.updated.2019$g2m.genes %in% rownames(seuratObject))]
+)
+
+# For some reason when performing CellCycleScoring on SCTransformed data, it fails in some samples. The error is the following:
+# Error in `cut_number()`:
+#   ! Insufficient data values to produce 24 bins.
+# Run `rlang::last_error()` to see where the error occurred.
+# Having had a look on the Github page of Seurat, this seems to occur when no 24 bins can be found. An odd solution is to normalize with NormalizeData instead. 
+# As the eventual goal is to merge the datasets and then renormalize later on again with SCTransform, I will use NormalizeData as a side-step.
+
+if (any(unlist(lapply(cc_genes_present, length)) != 0)) {
+  seuratObject <- CellCycleScoring(
+    object = seuratObject,
+    s.features = cc_genes_present$s_genes,
+    g2m.features = cc_genes_present$g2m_genes
+  )
+}
+```
+
+## Celltypes
+
+### Hao et al. 2020
+
+Next, we add the annotations lifted over from the Hao et al. 2020, a scRNAseq experiment on 8 individuals where cells were annotated using CITE-seq.
+
+```{r reference PBMC}
+reference_seuratObject <- readRDS(reference_rds_path)
+
+ref_anchors <- FindTransferAnchors(
+  reference = reference_seuratObject,
+  query = seuratObject,
+  normalization.method = "SCT",
+  reference.reduction = "pca",
+  dims = 1:50
+)
+
+predictions <- TransferData(anchorset = ref_anchors , 
+                            reference = reference_seuratObject,
+                            refdata = list(
+                              celltype_l1 = "celltype.l1",
+                              celltype_l2 = "celltype.l2",
+                              celltype_l3 = "celltype.l3",
+                              celltype_l4 = "celltype.l4")
+)
+
+seuratObject@meta.data <- seuratObject@meta.data %>%
+  dplyr::mutate(celltype_l1 = predictions$celltype_l1$predicted.id,
+                celltype_l1_score = predictions$celltype_l1$prediction.score.max, 
+                celltype_l2 = predictions$celltype_l2$predicted.id, 
+                celltype_l2_score = predictions$celltype_l2$prediction.score.max, 
+                celltype_l3 = predictions$celltype_l3$predicted.id, 
+                celltype_l3_score = predictions$celltype_l3$prediction.score.max,
+                celltype_l4 = predictions$celltype_l4$predicted.id, 
+                celltype_l4_score = predictions$celltype_l4$prediction.score.max)
+rownames(seuratObject@meta.data) <- colnames(seuratObject)
+
+cell_metadata <- seuratObject@meta.data
+```
+
+### Manual annotations
+
+While the automatic annotations do a reasonable job at annotating cells, I find that there are often discrepancies between the different levels with certain B cell subsets being characterized as a myeloid. Such annotations are clearly wrong and need to be remediated.
+
+```{r normalize}
+seuratObject <- DietSeurat(seuratObject, 
+                           counts = TRUE, 
+                           data = TRUE, 
+                           scale.data = FALSE)
+
+seuratObject <- SCTransform(seuratObject, verbose = FALSE, conserve.memory = TRUE)
+```
+
+```{r dimension finding}
+seuratObject <- RunPCA(object = seuratObject, npcs = 100, seed.use = 16784323)
+ElbowPlot(seuratObject, ndims = 100)
+```
+
+```{r clustering}
+seuratObject <- FindNeighbors(seuratObject, reduction = "pca", dims = 1:38)
+seuratObject <- FindClusters(seuratObject, resolution = 0.5, verbose = FALSE)
+seuratObject <- RunUMAP(seuratObject, dims = 1:38, seed.use = 86793412)
+```
+
+Having clustered everything together, the next step is to investigate each. Generally, the major lineages are reasonably good.
+
+```{r lineage markers, fig.width = 9, fig.height=9}
+FeaturePlot(seuratObject, c("CD3D", "MS4A1", "CD14", "FCGR3A", "NKG7", "PPBP", "CD34", "CLEC10A", "CD1C"))
+```
+
+#### T
+
+```{r t normalize}
+t_seuratObject <- seuratObject[,seuratObject@meta.data$celltype_l1 == "T"]
+t_seuratObject <- t_seuratObject[Matrix::rowSums(t_seuratObject) != 0, ]
+
+t_seuratObject <- DietSeurat(t_seuratObject, 
+                             counts = TRUE, 
+                             data = TRUE, 
+                             scale.data = FALSE)
+
+t_seuratObject <- SCTransform(t_seuratObject, verbose = FALSE, conserve.memory = TRUE)
+```
+
+```{r t dimension finding, fig.width = 10, fig.height = 5}
+t_seuratObject <- RunPCA(object = t_seuratObject, npcs = 100, seed.use = 978621)
+ElbowPlot(t_seuratObject, ndims = 100)
+```
+
+```{r t clustering, fig.width = 5, fig.height = 5}
+t_seuratObject <- FindNeighbors(t_seuratObject, reduction = "pca", dims = 1:30)
+t_seuratObject <- FindClusters(t_seuratObject, resolution = 0.5, verbose = FALSE)
+t_seuratObject <- RunUMAP(t_seuratObject, dims = 1:30, seed.use = 961496)
+
+DimPlot(t_seuratObject, group.by = "seurat_clusters", label = T) + theme(legend.pos = "bottom")
+```
+
+```{r t cycling cells, fig.width = 5, fig.height = 5}
+DimPlot(t_seuratObject, group.by = "Phase") + theme(legend.pos = "bottom")
+```
+
+```{r t dead debris, fig.width = 10, fig.height = 10}
+FeaturePlot(t_seuratObject, c("nFeature_RNA", "percent_MT")) + FeatureScatter(t_seuratObject, "percent_MT", "nFeature_RNA")
+```
+
+While it appears that there are some dead/dying cells at the bottom, I have seen worse. They are still identifiable and hence not FUBAR.
+
+```{r t automatic, fig.width = 5, fig.height = 6}
+DimPlot(t_seuratObject, group.by = "celltype_l4", label = T) + theme(legend.pos = "bottom")
+```
+
+```{r t naive, fig.width = 9, fig.height = 9}
+FeaturePlot(t_seuratObject, c("CD4", "CD8A", "SELL", "CCR7", "CXCR3", "CCR6", "TGFB1", "STAT3", "RORC"))
+```
+
+```{r t tem, fig.width = 6, fig.height = 6}
+FeaturePlot(t_seuratObject, c("CD4", "CD8A", "IL7R", "S100A4"))
+```
+
+```{r t th17, fig.width = 9, fig.height = 9}
+FeaturePlot(t_seuratObject, c("CD4", "CD8A", "SELL", "CCR7", "CXCR3", "CCR6", "TGFB1", "STAT3", "RORC"))
+```
+
+```{r t nkt, fig.width = 9, fig.height = 9}
+FeaturePlot(t_seuratObject, c("CD4", "CD8A", "GNLY", "CD3D", "KLRB1", "NCAM1", "KLRC2", "KLRC3", "FCGR3A"))
+```
+
+The top left cluster expresses NCAM1, which is NK.
+
+```{r t metadata, fig.width = 7, fig.height = 7}
+t_seuratObject@meta.data <- t_seuratObject@meta.data %>%
+  dplyr::mutate(manual_l4 = celltype_l4,
+                manual_l4 = ifelse(manual_l4 %in% c("HSPC", "CD8 TEM 1", "CD8 TEM 2", "CD8 TEM 3", "CD8 TEM 4", "CD8 TEM 5", "CD8 TEM 6"), "CD8 TEM", manual_l4),
+                manual_l4 = ifelse(manual_l4 %in% c("CD4 TCM 1", "CD4 TCM 2", "CD4 TCM 3"), "CD4 TCM", manual_l4),
+                manual_l4 = ifelse(manual_l4 %in% c("CD4 TEM 1", "CD4 TEM 2", "CD4 TEM 3"), "CD4 TEM", manual_l4),
+                manual_l4 = ifelse(manual_l4 %in% c("CD4 Treg naive", "CD4 Treg memory"), "CD4 Treg", manual_l4),
+                manual_l4 = ifelse(manual_l4 %in% c("CD8 naive 1", "CD8 naive 2"), "CD8 naive", manual_l4),
+                manual_l4 = ifelse(manual_l4 %in% c("CD8 TCM 1", "CD8 TCM 2", "CD8 TCM 3"), "CD8 TCM", manual_l4),
+                manual_l4 = ifelse(manual_l4 %in% c("CD8 TEM 1", "CD8 TEM 2", "CD8 TEM 3", "CD8 TEM 4", "CD8 TEM 5", "CD8 TEM 6"), "CD4 TEM", manual_l4),
+                manual_l4 = ifelse(manual_l4 %in% c("DNT 2"), "DNT", manual_l4),
+                manual_l4 = ifelse(manual_l4 %in% c("NK 1", "NK 2", "NK 3", "ILC"), "NKT", manual_l4),
+                manual_l4 = ifelse(seurat_clusters %in% c(5), "NKT", manual_l4),
+                manual_l4 = ifelse(manual_l4 %in% c("GDT 1", "GDT 2", "GDT 3", "GDT 4"), "GDT", manual_l4),
+                manual_l4 = ifelse(manual_l4 %in% c("NK proliferating"), "CD8 proliferating", manual_l4),
+                manual_l4 = ifelse(manual_l4 %in% c("Erythroblast", "Platelet"), "Dead/debris", manual_l4),
+                manual_l3 = manual_l4,
+                manual_l2 = manual_l3,
+                manual_l2 = ifelse(manual_l2 %in% c("CD4 CTL", "CD4 naive", "CD4 proliferating", "CD4 TCM", "CD4 TEM", "CD4 Treg"), "CD4T", manual_l2),
+                manual_l2 = ifelse(manual_l2 %in% c("CD8 naive", "CD8 proliferating", "CD8 TCM", "CD8 TEM"), "CD8T", manual_l2),
+                manual_l2 = ifelse(manual_l2 %in% c("DNT", "GDT", "MAIT", "NKT"), "other T", manual_l2),
+                manual_l1 = manual_l2,
+                manual_l1 = ifelse(manual_l1 %in% c("CD4T", "CD8T", "other T"), "T", manual_l1))
+
+DimPlot(t_seuratObject, group.by = "manual_l4", label = T) + theme(legend.pos = "bottom")
+```
+
+```{r t summarize}
+t_metadata <- t_seuratObject@meta.data %>%
+  dplyr::mutate(CellID = rownames(.)) %>%
+  dplyr::select(CellID, manual_l1, manual_l2, manual_l3, manual_l4)
+```
+
+#### NK/ILC
+
+```{r nk normalize}
+nk_seuratObject <- seuratObject[,seuratObject@meta.data$celltype_l1 == "NK/ILC"]
+nk_seuratObject <- nk_seuratObject[Matrix::rowSums(nk_seuratObject) != 0, ]
+
+nk_seuratObject <- DietSeurat(nk_seuratObject, 
+                              counts = TRUE, 
+                              data = TRUE, 
+                              scale.data = FALSE)
+
+nk_seuratObject <- SCTransform(nk_seuratObject, verbose = FALSE, conserve.memory = TRUE)
+```
+
+```{r nk dimension finding, fig.width = 10, fig.height = 5}
+nk_seuratObject <- RunPCA(object = nk_seuratObject, npcs = 100, seed.use = 146372)
+ElbowPlot(nk_seuratObject, ndims = 100)
+```
+
+```{r nk clustering, fig.width = 5, fig.height = 5}
+nk_seuratObject <- FindNeighbors(nk_seuratObject, reduction = "pca", dims = 1:32)
+nk_seuratObject <- FindClusters(nk_seuratObject, resolution = 0.5, verbose = FALSE)
+nk_seuratObject <- RunUMAP(nk_seuratObject, dims = 1:32, seed.use = 679412)
+
+DimPlot(nk_seuratObject, group.by = "seurat_clusters", label = T) + theme(legend.pos = "bottom")
+```
+
+```{r nk percentMT, fig.width = 15, fig.height = 10}
+FeaturePlot(nk_seuratObject, c("percent_MT", "nFeature_RNA")) + 
+  FeatureScatter(nk_seuratObject, "percent_MT", "nFeature_RNA") + geom_vline(xintercept = 10) + geom_hline(yintercept = 2000)
+```
+
+```{r nk cycling cells, fig.width = 5, fig.height = 5}
+DimPlot(nk_seuratObject, group.by = "Phase") + theme(legend.pos = "bottom")
+```
+
+```{r nk automatic, fig.width = 5, fig.height = 6}
+DimPlot(nk_seuratObject, group.by = "celltype_l4", label = T) + theme(legend.pos = "bottom")
+```
+
+```{r t nk cd16, fig.width = 6, fig.height = 9}
+FeaturePlot(nk_seuratObject, c("NCAM1", "FCGR3A", "IL7R", "NKG7", "CD3D"))
+```
+
+```{r nk metadata, fig.width = 7, fig.height = 7}
+nk_seuratObject@meta.data <- nk_seuratObject@meta.data %>%
+  dplyr::mutate(manual_l4 = celltype_l4,
+                manual_l4 = ifelse(seurat_clusters %in% c(3), "NK CD16+", manual_l4),
+                manual_l4 = ifelse(manual_l4 %in% c("NK CD56"), "NK CD16-CD56+", manual_l4),
+                manual_l4 = ifelse(manual_l4 %in% c("CD8 TEM 2", "CD8 TEM 5", "ILC", "NK 1", "NK 2", "NK 3", "NK 4", "Platelet"), "NK CD16-", manual_l4),
+                manual_l4 = ifelse(seurat_clusters %in% c(1) & GetAssayData(nk_seuratObject)["CD3D",]>1, "NKT", manual_l4),
+                manual_l4 = ifelse(percent_MT > 10, "Dead/debris", manual_l4),
+                manual_l3 = manual_l4,
+                manual_l3 = ifelse(manual_l3 %in% c("NK CD16-CD56+", "NK CD16-"), "NK CD16-", manual_l3),
+                manual_l2 = manual_l3,
+                manual_l2 = ifelse(manual_l2 %in% c("NK CD16-", "NK CD16+", "NK proliferating"), "NK", manual_l2),
+                manual_l2 = ifelse(manual_l2 %in% c("NKT"), "other T", manual_l2),
+                manual_l1 = manual_l2,
+                manual_l1 = ifelse(manual_l1 %in% c("other T"), "T", manual_l1))
+
+DimPlot(nk_seuratObject, group.by = "manual_l4", label = T) + theme(legend.pos = "bottom")
+```
+
+```{r nk summarize}
+nk_metadata <- nk_seuratObject@meta.data %>%
+  dplyr::mutate(CellID = rownames(.)) %>%
+  dplyr::select(CellID, manual_l1, manual_l2, manual_l3, manual_l4)
+```
+
+#### B
+
+```{r b normalize}
+b_seuratObject <- seuratObject[,seuratObject@meta.data$celltype_l1 == "B"]
+b_seuratObject <- b_seuratObject[Matrix::rowSums(b_seuratObject) != 0, ]
+
+b_seuratObject <- DietSeurat(b_seuratObject, 
+                             counts = TRUE, 
+                             data = TRUE, 
+                             scale.data = FALSE)
+
+b_seuratObject <- SCTransform(b_seuratObject, verbose = FALSE, conserve.memory = TRUE)
+```
+
+```{r b dimension finding, fig.width = 10, fig.height = 5}
+b_seuratObject <- RunPCA(object = b_seuratObject, npcs = 100, seed.use = 67893241)
+ElbowPlot(b_seuratObject, ndims = 100)
+```
+
+```{r b clustering, fig.width = 5, fig.height = 5}
+b_seuratObject <- FindNeighbors(b_seuratObject, reduction = "pca", dims = 1:28)
+b_seuratObject <- FindClusters(b_seuratObject, resolution = 0.5, verbose = FALSE)
+b_seuratObject <- RunUMAP(b_seuratObject, dims = 1:28, seed.use = 32487961)
+
+DimPlot(b_seuratObject, group.by = "seurat_clusters", label = T) + theme(legend.pos = "bottom")
+```
+
+```{r b cycling cells, fig.width = 5, fig.height = 5}
+DimPlot(b_seuratObject, group.by = "Phase") + theme(legend.pos = "bottom")
+```
+
+```{r b dead debris, fig.width = 10, fig.height = 10}
+FeaturePlot(b_seuratObject, c("nFeature_RNA", "percent_MT")) + FeatureScatter(b_seuratObject, "percent_MT", "nFeature_RNA")
+```
+
+While it appears that there are some dead/dying cells at the bottom, I have seen worse. They are still identifiable and hence not FUBAR.
+
+```{r b automatic, fig.width = 10, fig.height = 10}
+DimPlot(b_seuratObject, group.by = "celltype_l4", label = T) + theme(legend.pos = "bottom")
+```
+
+```{r b naive, fig.width = 12, fig.height = 8}
+FeaturePlot(b_seuratObject, c("MS4A1", "BANK1", "JCHAIN", "IGLC1", "IGLC2", "IGLC3", "IGKC", "SELL"))
+```
+
+```{r b tem, fig.width = 6, fig.height = 6}
+FeaturePlot(b_seuratObject, c("CD27"))
+```
+
+```{r b th17, fig.width = 9, fig.height = 9}
+FeaturePlot(b_seuratObject, c("CD4", "CD8A", "SELL", "CCR7", "CXCR3", "CCR6", "TGFB1", "STAT3", "RORC"))
+```
+
+```{r b nkt, fig.width = 9, fig.height = 9}
+FeaturePlot(b_seuratObject, c("CD4", "CD8A", "GNLY", "CD3D", "KLRB1", "NCAM1", "KLRC2", "KLRC3", "FCGR3A"))
+```
+
+The top left cluster expresses NCAM1, which is NK.
+
+```{r b metadata, fig.width = 7, fig.height = 7}
+b_seuratObject@meta.data <- b_seuratObject@meta.data %>%
+  dplyr::mutate(manual_l4 = celltype_l4,
+                manual_l4 = ifelse(manual_l4 == "Plasmablast", "Plasma", manual_l4),
+                manual_l4 = ifelse(percent_MT > 10 | manual_l4 %in% c("Platelet", "Erythroblast"), "Dead/debris", manual_l4),
+                manual_l3 = manual_l4,
+                manual_l2 = manual_l3,
+                manual_l2 = ifelse(manual_l2 %in% c("B naive kappa", "B naive lambda"), "B naive", manual_l2),
+                manual_l2 = ifelse(manual_l2 %in% c("B intermediate kappa", "B intermediate lambda"), "B intermediate", manual_l2),
+                manual_l2 = ifelse(manual_l2 %in% c("B memory kappa", "B memory lambda"), "B memory", manual_l2),
+                manual_l1 = manual_l2,
+                manual_l1 = ifelse(manual_l1 %in% c("B naive", "B intermediate", "B memory", "Plasma"), "B", manual_l1))
+
+DimPlot(b_seuratObject, group.by = "manual_l4", label = T) + theme(legend.pos = "bottom")
+```
+
+```{r b summarize}
+b_metadata <- b_seuratObject@meta.data %>%
+  dplyr::mutate(CellID = rownames(.)) %>%
+  dplyr::select(CellID, manual_l1, manual_l2, manual_l3, manual_l4)
+```
+
+#### Myeloid
+
+```{r myeloid normalize}
+myeloid_seuratObject <- seuratObject[,seuratObject@meta.data$celltype_l1 %in% "Myeloid"]
+myeloid_seuratObject <- myeloid_seuratObject[Matrix::rowSums(myeloid_seuratObject) != 0, ]
+
+myeloid_seuratObject <- DietSeurat(myeloid_seuratObject, 
+                             counts = TRUE, 
+                             data = TRUE, 
+                             scale.data = FALSE)
+
+myeloid_seuratObject <- SCTransform(myeloid_seuratObject, verbose = FALSE, conserve.memory = TRUE)
+```
+
+```{r myeloid dimension finding, fig.width = 10, fig.height = 5}
+myeloid_seuratObject <- RunPCA(object = myeloid_seuratObject, npcs = 100, seed.use = 4312879)
+ElbowPlot(myeloid_seuratObject, ndims = 100)
+```
+
+```{r myeloid clustering, fig.width = 5, fig.height = 5}
+myeloid_seuratObject <- FindNeighbors(myeloid_seuratObject, reduction = "pca", dims = 1:26)
+myeloid_seuratObject <- FindClusters(myeloid_seuratObject, resolution = 0.5, verbose = FALSE)
+myeloid_seuratObject <- RunUMAP(myeloid_seuratObject, dims = 1:26, seed.use = 51233)
+
+DimPlot(myeloid_seuratObject, group.by = "seurat_clusters", label = T) + theme(legend.pos = "bottom")
+```
+
+```{r myeloid cycling cells, fig.width = 5, fig.height = 5}
+DimPlot(myeloid_seuratObject, group.by = "Phase") + theme(legend.pos = "bottom")
+```
+
+```{r myeloid dead debris, fig.width = 10, fig.height = 10}
+FeaturePlot(myeloid_seuratObject, c("nFeature_RNA", "percent_MT")) + FeatureScatter(myeloid_seuratObject, "percent_MT", "nFeature_RNA")
+```
+
+While it appears that there are some dead/dying cells at the bottom, I have seen worse. They are still identifiable and hence not FUBAR.
+
+```{r myeloid automatic, fig.width = 10, fig.height = 10}
+DimPlot(myeloid_seuratObject, group.by = "celltype_l4", label = T) + theme(legend.pos = "bottom")
+```
+
+```{r myeloid monocytes, fig.width = 12, fig.height = 8}
+FeaturePlot(myeloid_seuratObject, c("CD14", "FCGR3A"))
+```
+
+```{r myeloid CDCs, fig.width = 12, fig.height = 8}
+FeaturePlot(myeloid_seuratObject, c("CD1C", "CLEC10A", "CLEC9A", "ITGAX", "HLA-DQA1"))
+```
+
+```{r myeloid PDCs, fig.width = 15, fig.height = 15}
+FeaturePlot(myeloid_seuratObject, c("CLEC4C", "IRF4", "IRF8", "IL3RA", "IFNAR1", "IFNAR2"))
+```
+
+```{r myeloid ASDC, fig.width = 15, fig.height = 8}
+FeaturePlot(myeloid_seuratObject, c("AXL", "SIGLEC6"))
+```
+
+```{r myeloid platelets}
+FeaturePlot(myeloid_seuratObject, c("PPBP"))
+```
+
+
+```{r myeloid metadata, fig.width = 7, fig.height = 7}
+myeloid_seuratObject@meta.data <- myeloid_seuratObject@meta.data %>%
+  dplyr::mutate(manual_l4 = celltype_l4,
+                manual_l4 = ifelse(manual_l4 %in% c("ASDC MDC", "ASDC PDC"), "ASDC", manual_l4),
+                manual_l4 = ifelse(manual_l4 %in% c("CDC2 1", "CDC2 2"), "CDC2", manual_l4),
+                manual_l4 = ifelse(seurat_clusters %in% c(8) | manual_l4 == "Erythroblast", "Dead/debris", manual_l4),
+                manual_l3 = manual_l4,
+                manual_l2 = manual_l3,
+                manual_l2 = ifelse(manual_l2 %in% c("CDC1", "CDC2"), "CDC", manual_l2),
+                manual_l2 = ifelse(manual_l2 %in% c("Classical monocyte", "Non-classical monocyte"), "Monocyte", manual_l2),
+                manual_l1 = manual_l2,
+                manual_l1 = ifelse(manual_l1 %in% c("CDC", "Monocyte", "Platelet"), "Myeloid", manual_l1))
+
+DimPlot(myeloid_seuratObject, group.by = "manual_l4", label = T) + theme(legend.pos = "bottom")
+```
+
+```{r myeloid summarize}
+myeloid_metadata <- myeloid_seuratObject@meta.data %>%
+  dplyr::mutate(CellID = rownames(.)) %>%
+  dplyr::select(CellID, manual_l1, manual_l2, manual_l3, manual_l4)
+```
+
+#### HSPC
+
+```{r hspc, fig.width = 10, fig.height = 10}
+DimPlot(seuratObject, group.by = "celltype_l1", order = T, label = T)
+```
+
+```{r hspc cd34 visualization, fig.width = 10, fig.height = 10}
+FeaturePlot(seuratObject, "CD34", order = T)
+```
+
+```{r hspc cd34}
+table(GetAssayData(seuratObject)["CD34",]>0)
+```
+
+While it is clear that there are some CD34+ cells, they don't encompass all. I'll retain the automatic annotations.
+
+```{r hspc summarize}
+hspc_metadata <- seuratObject@meta.data %>%
+  dplyr::filter(celltype_l1 == "HSPC") %>%
+  dplyr::mutate(manual_l4 = celltype_l4,
+                manual_l3 = manual_l4,
+                manual_l2 = manual_l3,
+                manual_l1 = manual_l2) %>%
+  dplyr::mutate(CellID = rownames(.)) %>%
+  dplyr::select(CellID, manual_l1, manual_l2, manual_l3, manual_l4)
+```
+
+#### Erythroblast
+
+```{r erythroblast, fig.width = 10, fig.height = 5}
+FeaturePlot(seuratObject, c("HBA1", "HBA2"), order = T)
+```
+
+I don't feel that there are any erythroblasts on the basis of HBA1 and HBA2. My guess is that what is automatically annotated as a erythroblast, is actually dead/debris.
+
+```{r erythroblast summarize}
+erythroblast_metadata <- seuratObject@meta.data %>%
+  dplyr::filter(celltype_l1 == "Erythroblast") %>%
+  dplyr::mutate(manual_l4 = "Dead/debris",
+                manual_l3 = manual_l4,
+                manual_l2 = manual_l3,
+                manual_l1 = manual_l2) %>%
+  dplyr::mutate(CellID = rownames(.)) %>%
+  dplyr::select(CellID, manual_l1, manual_l2, manual_l3, manual_l4)
+```
+
+### Merge data
+
+```{r append metadata}
+manual_metadata <- do.call(rbind, list(t_metadata, b_metadata, nk_metadata, myeloid_metadata, erythroblast_metadata, hspc_metadata))
+```
+
+```{r seuratobject metadata, fig.width = 10, fig.height = 12}
+seuratObject@meta.data <- seuratObject@meta.data %>%
+  dplyr::left_join(manual_metadata, by = "CellID")
+
+rownames(seuratObject@meta.data) <- seuratObject@meta.data$CellID
+
+DimPlot(seuratObject, group.by = "manual_l1", label = T) +
+  theme(legend.pos = "bottom")
+```
+
+## Save
+
+```{r save data} 
+data.table::fwrite(manual_metadata, seurat_annotated_csv_path)
+```
+
+```{r sessionInfo}
+sessionInfo()
+```

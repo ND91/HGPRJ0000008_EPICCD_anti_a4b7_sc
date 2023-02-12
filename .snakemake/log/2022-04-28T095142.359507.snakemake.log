@@ -1,0 +1,8 @@
+ImportError in line 11 of /mnt/smb/lkgres/ayliyim/personal/ayliyim/pipelines/rnaseq/workflow/Snakefile:
+Missing optional dependency 'openpyxl'.  Use pip or conda to install openpyxl.
+  File "/mnt/smb/lkgres/ayliyim/personal/ayliyim/pipelines/rnaseq/workflow/Snakefile", line 11, in <module>
+  File "/mnt/nfs/kgres/home/andrewliyim/local/miniconda3/envs/snakemake/lib/python3.9/site-packages/pandas/util/_decorators.py", line 311, in wrapper
+  File "/mnt/nfs/kgres/home/andrewliyim/local/miniconda3/envs/snakemake/lib/python3.9/site-packages/pandas/io/excel/_base.py", line 457, in read_excel
+  File "/mnt/nfs/kgres/home/andrewliyim/local/miniconda3/envs/snakemake/lib/python3.9/site-packages/pandas/io/excel/_base.py", line 1419, in __init__
+  File "/mnt/nfs/kgres/home/andrewliyim/local/miniconda3/envs/snakemake/lib/python3.9/site-packages/pandas/io/excel/_openpyxl.py", line 524, in __init__
+  File "/mnt/nfs/kgres/home/andrewliyim/local/miniconda3/envs/snakemake/lib/python3.9/site-packages/pandas/compat/_optional.py", line 141, in import_optional_dependency

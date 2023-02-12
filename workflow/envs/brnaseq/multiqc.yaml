@@ -1,8 +1,5 @@
 channels:
   - bioconda
-  - anaconda
   - conda-forge
 dependencies:
-  - fastqc
-  - pandas
-  - regex
+  - multiqc
