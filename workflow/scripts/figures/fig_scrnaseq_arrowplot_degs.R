@@ -3,7 +3,6 @@
 # The goal of this script is to create a arrowplot of all DEGs.
 
 library(dplyr)
-library(muscat)
 library(ggplot2)
 
 args <- commandArgs(trailingOnly = TRUE)

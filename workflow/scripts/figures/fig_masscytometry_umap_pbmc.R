@@ -1,8 +1,7 @@
 #!/usr/bin/env Rscript
 
-# The goal of this script is to create a scatterplot of the first two UMAP dimensions of all PBMCs colored by manual_l3
+# The goal of this script is to create a scatterplot of the first two UMAP dimensions of all PBMCs colored by manual_l3 as obtained through mass cytometry
 
-library(Seurat)
 library(dplyr)
 library(ggplot2)
 library(ggrastr)
@@ -13,40 +12,41 @@ if (length(args) != 3) {
   stop(paste0("Script needs 3 arguments. Current input is:", args))
 }
 
-seurat_rds <- args[1]
+umap_csv <- args[1]
 manual_l3_order_xlsx <- args[2]
 umap_pdf <- args[3]
 
-seuratObject <- readRDS(seurat_rds)
-manual_l3_order <- readxl::read_excel(manual_l3_order_xlsx, col_names = F)
+umap_df <- read.csv(umap_csv)
+manual_l3_order <- readxl::read_excel(manual_l3_order_xlsx) %>%
+  dplyr::mutate(number = as.numeric(factor(Celltype, levels = Celltype)),
+                celltype_number = paste0(number, ". ", Celltype),
+                celltype_number = factor(celltype_number, levels = celltype_number))
 
-umap_df <- data.frame(CB = colnames(seuratObject),
-                      Embeddings(seuratObject[["umap"]]),
-                      seuratObject@meta.data) %>%
-  dplyr::mutate(manual_l3 = factor(manual_l3, levels = pull(manual_l3_order)),
-                manual_l3_number = as.numeric(manual_l3),
-                manual_l3_w_number = paste0(as.numeric(manual_l3), ". ", manual_l3))
+umap_df <- umap_df %>%
+  dplyr::left_join(manual_l3_order, by = c("manual_l3" = "Celltype")) %>%
+  dplyr::mutate(manual_l3 = factor(manual_l3, levels = manual_l3_order$Celltype))
 
-manual_l3_w_number_order <- umap_df %>% 
-  dplyr::select(manual_l3_number, manual_l3_w_number) %>% 
-  unique() %>% arrange(manual_l3_number) %>% 
-  pull(manual_l3_w_number)
+manual_l3_colors <- manual_l3_order$Color
+names(manual_l3_colors) <- manual_l3_order$celltype_number
 
-umap_df$manual_l3_w_number <- factor(umap_df$manual_l3_w_number, levels = manual_l3_w_number_order)
-
-plotobj <- ggplot(umap_df, aes(x = UMAP_1, y = UMAP_2, col = manual_l3_w_number)) +
-  geom_point_rast(show.legend = T, size = 1.5, col = "black") +
-  geom_point_rast(show.legend = T, size = 0.5) +
+ggobj <- ggplot(umap_df, aes(x = UMAP_1, y = UMAP_2, col = celltype_number)) +
+  geom_point_rast(show.legend = T, size = 0.5, col = "black") +
+  geom_point_rast(show.legend = T, size = 0.25) +
   labs(y = "",
-       x = "") +
+       x = "",
+       title = "Mass cytometry",
+       subtitle = paste0("subsampled to ", nrow(umap_df), " cells")) +
   geom_label_repel(data = umap_df %>%
-                     dplyr::group_by(manual_l3_number, manual_l3_w_number) %>%
+                     dplyr::group_by(number, celltype_number) %>%
                      summarize(x = median(x = UMAP_1),
                                y = median(x = UMAP_2)),
-                   mapping = aes(label = manual_l3_w_number, x = x, y = y),
-                   alpha = 0.9, 
-                   show.legend = F) +
+                   mapping = aes(label = number, x = x, y = y, fill = celltype_number),
+                   alpha = 0.75, 
+                   show.legend = F,
+                   col = "black") +
   guides(colour = guide_legend(override.aes = list(size = 3))) +
+  scale_color_manual(values = manual_l3_colors, drop = F) +
+  scale_fill_manual(values = manual_l3_colors, drop = F) +
   theme_minimal() +
   theme(panel.grid.major = element_blank(), 
         panel.grid.minor = element_blank(),
@@ -60,7 +60,7 @@ plotobj <- ggplot(umap_df, aes(x = UMAP_1, y = UMAP_2, col = manual_l3_w_number)
         strip.text.x = element_text(face = "bold"))
 
 pdf(width = 10, height = 10, file = umap_pdf)
-print(plotobj)
+print(ggobj)
 dev.off()
 
 sessionInfo()

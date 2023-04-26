@@ -1,7 +1,8 @@
 #!/usr/bin/env Rscript
 
-# The goal of this script is to create a scatterplot of the first two UMAP dimensions of all PBMCs colored by manual_l3
+# The goal of this script is to create a scatterplot of the first two UMAP dimensions of the monocytes colored by response, split by
 
+library(Seurat)
 library(dplyr)
 library(ggplot2)
 library(ggrastr)
@@ -29,24 +30,22 @@ umap_df <- umap_df %>%
 manual_l3_colors <- manual_l3_order$Color
 names(manual_l3_colors) <- manual_l3_order$celltype_number
 
-ggobj <- ggplot(umap_df, aes(x = UMAP_1, y = UMAP_2, col = celltype_number)) +
+ggobj <- ggplot(umap_df, aes(x = UMAP_1, y = UMAP_2)) +
   geom_point_rast(show.legend = T, size = 0.5, col = "black") +
-  geom_point_rast(show.legend = T, size = 0.25) +
+  geom_point_rast(show.legend = T, size = 0.25, aes(col = Response)) +
   labs(y = "",
        x = "",
-       title = "scRNAseq",
-       subtitle = paste0(nrow(umap_df), " cells")) +
+       title = "Monocytes") +
   geom_label_repel(data = umap_df %>%
-                     dplyr::group_by(number, celltype_number) %>%
+                     dplyr::group_by(manual_l3) %>%
                      summarize(x = median(x = UMAP_1),
                                y = median(x = UMAP_2)),
-                   mapping = aes(label = number, x = x, y = y, fill = celltype_number),
-                   alpha = 0.75, 
+                   mapping = aes(label = manual_l3, x = x, y = y),
+                   alpha = 0.8,
                    show.legend = F,
                    col = "black") +
   guides(colour = guide_legend(override.aes = list(size = 3))) +
-  scale_color_manual(values = manual_l3_colors, drop = F) +
-  scale_fill_manual(values = manual_l3_colors, drop = F) +
+  #scale_color_manual(values = c(), drop = F) +
   theme_minimal() +
   theme(panel.grid.major = element_blank(), 
         panel.grid.minor = element_blank(),
@@ -59,7 +58,7 @@ ggobj <- ggplot(umap_df, aes(x = UMAP_1, y = UMAP_2, col = celltype_number)) +
         axis.ticks.y = element_blank(),
         strip.text.x = element_text(face = "bold"))
 
-pdf(width = 8, height = 8, file = umap_pdf)
+pdf(width = 7.5, height = 7.5, file = umap_pdf)
 print(ggobj)
 dev.off()
 

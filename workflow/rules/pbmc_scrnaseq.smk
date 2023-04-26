@@ -3,32 +3,36 @@ rule scrnaseq_copy_fastqs:
     fastqdir=lambda w: (scrnaseq_fastq_df[scrnaseq_fastq_df.file == w.scrnaseq_fastq_fn].old_path).tolist(),
   output:
     directory("resources/scrnaseq/fastq/{scrnaseq_fastq_fn}"),
+  log:
+    "resources/scrnaseq/fastq/rsync_{scrnaseq_fastq_fn}.log",
   conda:
     "../envs/rsync.yaml"
   message:
-    "--- Copying {input.fastqdir} to scratch ---"
+    "--- scRNAseq: Copying {input.fastqdir} to scratch ---"
   shell:
     """
     if [ ! -d "{input.fastqdir}" ]; then
       echo "{input.fastqdir} does not exist!"
       exit 1
+    else
+      rsync -ar "{input.fastqdir}/" "{output}" &> "{log}"
     fi
-    
-    rsync -ar "{input.fastqdir}/" "{output}"
     """
 
 rule scrnaseq_copy_cellranger_reference:
   input:
     config['scrnaseq_reference_dir']
   output:
-    directory("resources/scrnaseq/reference_genome")
+    directory("resources/scrnaseq/reference_genome"),
+  log:
+    "resources/scrnaseq/rsync_scrnaseq_reference.log",
   conda:
     "../envs/rsync.yaml"
   message:
-    "--- Copying reference genome to scratch ---"
+    "--- scRNAseq: Copying reference genome to scratch ---"
   shell:
     """
-    rsync -ar "{input}/" "{output}"
+    rsync -ar "{input}/" "{output}" &> "{log}"
     """
 
 rule scrnaseq_cellranger_count:
@@ -49,10 +53,14 @@ rule scrnaseq_cellranger_count:
   benchmark:
     "output/scrnaseq/cellranger/{run_fbc}_count.benchmark.txt"
   params:
-    runid="{run_fbc}",
+    run_fbc="{run_fbc}",
     cellranger_basepath=config["cellranger_basepath"],
   resources:
     mem_mb=64000,
+  params:
+    run_fbc="{run_fbc}",
+  message:
+    "--- scRNAseq: CellRanger count {params.run_fbc} ---"
   shell:
     """
     rm -rf {output.cellrangerdir}
@@ -61,7 +69,7 @@ rule scrnaseq_cellranger_count:
     cd "output/scrnaseq/cellranger"
     #find . -type d -empty -delete
     {params.cellranger_basepath}/cellranger count \
-      --id="{params.runid}" \
+      --id="{params.run_fbc}" \
       --libraries=$OLDPWD/{input.libraries} \
       --feature-ref=$OLDPWD/{input.features} \
       --transcriptome=$OLDPWD/{input.reference_genome} \
@@ -71,22 +79,28 @@ rule scrnaseq_cellranger_count:
       --localmem=$mem_gb &> $OLDPWD/{log}
     """
 
-rule scrnaseq_cellranger_count_mv:
+rule scrnaseq_cellranger_count_copy:
   input:
     cellrangertmpdir="output/scrnaseq/cellranger/{run_fbc}",
   output:
     cellrangerfinaldir=directory("{basedir}/output/scrnaseq/cellranger/{run_fbc}"),
+  conda:
+    "../envs/rsync.yaml"
   log:
-    "{basedir}/output/scrnaseq/{run_fbc}_cellranger_mv.log",
+    "{basedir}/output/scrnaseq/{run_fbc}_cellranger_copy.log",
   threads: 
     1
   benchmark:
     "{basedir}/output/scrnaseq/{run_fbc}_cellranger_mv.benchmark.txt"
   resources:
     mem_mb=10000,
+  params:
+    run_fbc="{run_fbc}",
+  message:
+    "--- scRNAseq: Copying CellRanger output {params.run_fbc} to {basedir} ---"
   shell:
     """
-    mv "{input.cellrangertmpdir}" &> "{output.cellrangerfinaldir}" &> "{log}"
+    rsync -ar "{input.cellrangertmpdir}" "{output.cellrangerfinaldir}" &> "{log}"
     """
 
 rule scrnaseq_download_pbmc_reference_h5seurat:
@@ -99,7 +113,7 @@ rule scrnaseq_download_pbmc_reference_h5seurat:
   conda:
     "../envs/wget.yaml",
   message:
-    "--- Downloading PBMC reference dataset in h5seurat format from Hao et al. 2020 ---"
+    "--- scRNAseq: Downloading PBMC reference dataset in h5seurat format from Hao et al. 2020 ---"
   log:
     "{basedir}/resources/scrnaseq/reference_data/download_pbmc_reference_h5seurat.log",
   benchmark:
@@ -112,13 +126,14 @@ rule scrnaseq_download_pbmc_reference_h5seurat:
 rule scrnaseq_preparation_pbmc_reference:
   input:
     pbmc_reference_h5seurat="{basedir}/resources/scrnaseq/reference_data/pbmc_multimodal.h5seurat",
-    renv_library="renv",
   output:
     pbmc_reference_rds="{basedir}/resources/scrnaseq/reference_data/pbmc_multimodal.Rds",
   threads: 
     1
   conda:
-    "../envs/r.yaml"
+    "../envs/r-seuratdisk.yaml",
+  message:
+    "--- scRNAseq: Converting PBMC reference dataset from h5seurat to rds ---"
   log:
     "{basedir}/resources/scrnaseq/reference_data/preparation_pbmc_reference.log",
   benchmark:
@@ -133,13 +148,14 @@ rule scrnaseq_preparation_pbmc_reference:
 rule scrnaseq_normalization:
   input:
     count_mtx="output/scrnaseq/cellranger/{run_fbc}/outs/raw_feature_bc_matrix",
-    renv_library="renv",
   output:
     seurat_rds="{basedir}/output/scrnaseq/normalized/{run_fbc}_normalized_SeuratObject.Rds",
   threads:
     1
   conda:
-    "../envs/scrnaseq/r.yaml"
+    "../envs/r-seurat.yaml",
+  message:
+    "--- scRNAseq: Normalizing {params.run_fbc} ---"
   log:
     "{basedir}/output/scrnaseq/normalized/{run_fbc}.log",
   benchmark:
@@ -147,54 +163,60 @@ rule scrnaseq_normalization:
   resources:
     mem_mb=16000,
   params:
-    runid="{run_fbc}",
+    run_fbc="{run_fbc}",
     lowerbound_numis=600,
   shell:
     """
-    Rscript workflow/scripts/scrnaseq/normalization.R "{input.count_mtx}" "{output.seurat_rds}" "{params.runid}" "{params.lowerbound_numis}" &> "{log}"
+    Rscript workflow/scripts/scrnaseq/normalization.R "{input.count_mtx}" "{output.seurat_rds}" "{params.run_fbc}" "{params.lowerbound_numis}" &> "{log}"
     """
 
 rule scrnaseq_celltype_annotation:
   input:
     seurat_rds="{basedir}/output/scrnaseq/normalized/{run_fbc}_normalized_SeuratObject.Rds",
     pbmc_rds="{basedir}/resources/scrnaseq/reference_data/pbmc_multimodal.Rds",
-    renv_library="renv",
   output:
     seurat_annotated_csv="{basedir}/output/scrnaseq/cell_metadata/celltype_annotation/{run_fbc}_celltype_annotated.csv",
   threads: 
     1
   conda:
-    "../envs/scrnaseq/r.yaml",
+    "../envs/r-seurat.yaml",
+  message:
+    "--- scRNAseq: Automatically annotating {params.run_fbc} ---",
   log:
     "{basedir}/output/scrnaseq/cell_metadata/celltype_annotation/{run_fbc}_celltype_annotation.log",
   benchmark:
     "{basedir}/output/scrnaseq/cell_metadata/celltype_annotation/{run_fbc}_celltype_annotation_benchmark.txt",
   resources:
     mem_mb=47000,
+  params:
+    run_fbc="{run_fbc}",
   shell:
     """
-    Rscript -e "rmarkdown::render('workflow/scripts/scrnaseq/celltype_annotation.Rmd', knit_root_dir = "${{PWD}}")" &> {log}
+    Rscript -e "rmarkdown::render('workflow/scripts/scrnaseq/celltype_annotation.Rmd', knit_root_dir = "${{PWD}}")" &> "{log}"
     """
 
 rule scrnaseq_sample_demultiplex:
   input:
     seurat_rds="{basedir}/output/scrnaseq/normalized/{run_fbc}_normalized_SeuratObject.Rds",
-    renv_library="renv",
   output:
     seurat_demultiplex_csv="{basedir}/output/scrnaseq/cell_metadata/sample_demultiplex/{run_fbc}_demultiplex.csv",
   threads: 
     1
   conda:
-    "../envs/scrnaseq/r.yaml",
+    "../envs/r-seurat.yaml",
+  message:
+    "--- scRNAseq: Demultiplexing {params.run_fbc} ---",
   log:
     "{basedir}/output/scrnaseq/cell_metadata/sample_demultiplex/{run_fbc}_demultiplex_annotation.log",
   benchmark:
     "{basedir}/output/scrnaseq/cell_metadata/sample_demultiplex/{run_fbc}_demultiplex_benchmark.txt",
   resources:
     mem_mb=47000,
+  params:
+    run_fbc="{run_fbc}",
   shell:
     """
-    Rscript -e "rmarkdown::render('workflow/scripts/scrnaseq/sample_demultiplex.Rmd', knit_root_dir = "${{PWD}}")" &> {log}
+    Rscript -e "rmarkdown::render('workflow/scripts/scrnaseq/sample_demultiplex.Rmd', knit_root_dir = "${{PWD}}")" &> "{log}"
     """
 
 rule scrnaseq_integrate_annotations:
@@ -203,43 +225,69 @@ rule scrnaseq_integrate_annotations:
     seurat_demultiplex_csv=expand("config/annotations/demultiplexed.csv", basedir=basedir),
     seurat_annotated_csv=expand("config/annotations/celltypes.csv", basedir=basedir),
     sample_metadata_csv=config['sample_metadata'],
-    renv_library="renv",
   output:
     seurat_annotated_rds="{basedir}/output/scrnaseq/cell_metadata/annotated_SeuratObject.Rds",
   threads: 
     1
   conda:
-    "../envs/scrnaseq/r.yaml",
+    "../envs/r-seurat.yaml",
   log:
     "{basedir}/output/scrnaseq/cell_metadata/integrate_annotations.log",
+  message:
+    "--- scRNAseq: Integrating annotations ---",
   benchmark:
     "{basedir}/output/scrnaseq/cell_metadata/integrate_annotations_benchmark.txt",
   resources:
     mem_mb=47000,
   shell:
     """
-    Rscript workflow/scripts/scrnaseq/merge_annotations.R {input.seurat_rds} {input.seurat_demultiplex_csv} {input.seurat_annotated_csv} {input.sample_metadata_csv} {output.seurat_annotated_rds} &> {log}
+    Rscript workflow/scripts/scrnaseq/merge_annotations.R "{input.seurat_rds}" "{input.seurat_demultiplex_csv}" "{input.seurat_annotated_csv}" "{input.sample_metadata_csv}" "{output.seurat_annotated_rds}" &> "{log}"
     """
     
 rule scrnaseq_clustering:
   input:
     seurat_annotated_rds="{basedir}/output/scrnaseq/cell_metadata/annotated_SeuratObject.Rds",
-    renv_library="renv",
   output:
     seurat_clustered_rds="{basedir}/output/scrnaseq/clustered/clustered_SeuratObject.Rds",
+    umap_csv="{basedir}/output/scrnaseq/clustered/umap.csv",
   threads: 
     1
   conda:
-    "../envs/scrnaseq/r.yaml",
+    "../envs/r-seurat.yaml",
   log:
-    "{basedir}/output/scrnaseq/cell_metadata/clustering.log",
+    "{basedir}/output/scrnaseq/clustered/clustering.log",
+  message:
+    "--- scRNAseq: Dimension reduction and clustering ---",
   benchmark:
-    "{basedir}/output/scrnaseq/cell_metadata/clustering_benchmark.txt",
+    "{basedir}/output/scrnaseq/clustered/clustering_benchmark.txt",
   resources:
     mem_mb=47000,
   shell:
     """
-    Rscript workflow/scripts/scrnaseq/clustering.R {input.seurat_annotated_rds} {output.seurat_clustered_rds} &> {log}
+    Rscript workflow/scripts/scrnaseq/clustering.R "{input.seurat_annotated_rds}" "{output.seurat_clustered_rds}" "{output.umap_csv}" &> "{log}"
+    """
+
+rule monocyte_subsetting:
+  input:
+    seurat_annotated_rds="{basedir}/output/scrnaseq/cell_metadata/annotated_SeuratObject.Rds",
+  output:
+    seurat_monocyte_rds="{basedir}/output/scrnaseq/monocyte/monocyte_SeuratObject.Rds",
+    umap_csv="{basedir}/output/scrnaseq/monocyte/umap.csv",
+  threads: 
+    1
+  conda:
+    "../envs/r-seurat.yaml",
+  log:
+    "{basedir}/output/scrnaseq/monocyte/monocyte_subsetting.log",
+  message:
+    "--- scRNAseq: Monocyte subsetting, dimension reduction, and clustering ---",
+  benchmark:
+    "{basedir}/output/scrnaseq/monocyte/monocyte_subsetting_benchmark.txt",
+  resources:
+    mem_mb=47000,
+  shell:
+    """
+    Rscript workflow/scripts/scrnaseq/monocyte_subsetting.R "{input.seurat_annotated_rds}" "{output.seurat_monocyte_rds}" "{output.umap_csv}" &> "{log}"
     """
 
 # Analyses
@@ -247,15 +295,16 @@ rule scrnaseq_clustering:
 rule scrnaseq_differential_abundance:
   input:
     seurat_clustered_rds="{basedir}/output/scrnaseq/clustered/clustered_SeuratObject.Rds",
-    renv_library="renv",
   output:
     dacs_csv="{basedir}/output/scrnaseq/da/dacs.csv",
   threads: 
     1
   conda:
-    "../envs/scrnaseq/r.yaml",
+    "../envs/r-speckle.yaml",
   log:
     "{basedir}/output/scrnaseq/da/dacs.log",
+  message:
+    "--- scRNAseq: Differential abundance analyses ---",
   benchmark:
     "{basedir}/output/scrnaseq/da/dacs_benchmark.txt",
   resources:
@@ -268,21 +317,45 @@ rule scrnaseq_differential_abundance:
 rule scrnaseq_differential_expression:
   input:
     seurat_annotated_rds="{basedir}/output/scrnaseq/clustered/clustered_SeuratObject.Rds",
-    renv_library="renv",
   output:
-    degs_rds="{basedir}/output/scrnaseq/de/degs.Rds",
-    pb_rds="{basedir}/output/scrnaseq/de/pb.Rds",
+    degs_list_rds="{basedir}/output/scrnaseq/de/degs_list.Rds",
   threads: 
     1
   conda:
-    "../envs/scrnaseq/r.yaml",
+    "../envs/r-deseq2.yaml",
   log:
-    "{basedir}/output/scrnaseq/de/degs.log",
+    "{basedir}/output/scrnaseq/de/scrnaseq_differential_expression.log",
+  message:
+    "--- scRNAseq: Differential expression analyses per celltype ---",
   benchmark:
-    "{basedir}/output/scrnaseq/de/degs_benchmark.txt",
+    "{basedir}/output/scrnaseq/de/scrnaseq_differential_expression_benchmark.txt",
   resources:
     mem_mb=47000,
   shell:
     """
-    Rscript workflow/scripts/scrnaseq/differential_expression.R "{input.seurat_annotated_rds}" "{output.degs_rds}" "{output.pb_rds}" &> "{log}"
+    Rscript workflow/scripts/scrnaseq/differential_expression.R "{input.seurat_annotated_rds}" "{output.degs_list_rds}" &> "{log}"
+    """
+    
+rule scrnaseq_pbmc_pseudobulk_differential_expression:
+  input:
+    seurat_annotated_rds="{basedir}/output/scrnaseq/clustered/clustered_SeuratObject.Rds",
+  output:
+    dds_rds="{basedir}/output/scrnaseq/pseudobulk/pbmc_pb_dds.Rds",
+    rld_rds="{basedir}/output/scrnaseq/pseudobulk/pbmc_pb_rld.Rds",
+    degs_csv="{basedir}/output/scrnaseq/pseudobulk/pbmc_RvNR_degs.csv",
+  threads: 
+    1
+  conda:
+    "../envs/r-deseq2.yaml",
+  log:
+    "{basedir}/output/scrnaseq/pseudobulk/pbmc_pseudobulk_differential_expression.log",
+  message:
+    "--- scRNAseq: Differential expression analyses on all PBMCs together ---",
+  benchmark:
+    "{basedir}/output/scrnaseq/pseudobulk/pbmc_pseudobulk_differential_expression_benchmark.txt",
+  resources:
+    mem_mb=47000,
+  shell:
+    """
+    Rscript workflow/scripts/scrnaseq/pbmc_pseudobulk_differential_expression.R "{input.seurat_annotated_rds}" "{output.dds_rds}" "{output.rld_rds}" "{output.degs_csv}" &> "{log}"
     """

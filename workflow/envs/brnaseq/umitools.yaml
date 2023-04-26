@@ -1,4 +1,0 @@
-channels:
-  - bioconda
-dependencies:
-  - umi_tools

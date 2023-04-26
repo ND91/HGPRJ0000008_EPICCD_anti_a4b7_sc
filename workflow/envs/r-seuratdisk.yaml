@@ -1,0 +1,8 @@
+channels:
+  - bioconda      
+  - conda-forge
+  - anaconda
+  - defaults
+dependencies:
+  - r-seuratdisk=0.0.9019
+  - r-seurat

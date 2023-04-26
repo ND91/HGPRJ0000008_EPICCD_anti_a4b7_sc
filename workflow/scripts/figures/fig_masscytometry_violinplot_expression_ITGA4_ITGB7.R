@@ -1,6 +1,6 @@
 #!/usr/bin/env Rscript
 
-# The goal of this script is to create a boxplot of l1 relative to all PBMCs grouped by response and facetted by lineage.
+# The goal of this script is to create a boxplot of ITGA4 and A4B7 by manual_l3.
 
 library(Seurat)
 library(dplyr)
@@ -13,46 +13,34 @@ if (length(args) != 2) {
   stop(paste0("Script needs 2 arguments. Current input is:", args))
 }
 
-seurat_rds_path <- args[1]
-manual_l3_order_xlsx <- args[2]
-violinplot_pdf <- args[3]
+sce_rds <- args[1]
+comparison <- args[2]
+boxplot_pdf <- args[3]
 
-manual_l3_order <- readxl::read_excel(manual_l3_order_xlsx, col_names = F) %>%
-  pull(`...1`)
+sce <- readRDS(sce_rds)
 
-marker_expr <- GetAssayData(seuratObject, assay = "RNA")[which(rownames(GetAssayData(seuratObject, assay = "RNA")) %in% c("ITGA4", "ITGB7")), ]
+expression_df <- assay(sce)[c("ITGA4", "A4B7"),] %>%
+  data.frame(., ProteinID = rownames(.)) %>%
+  tidyr::pivot_longer(-ProteinID, names_to = "cellID", values_to = "expression") %>%
+  dplyr::left_join(colData(sce) %>%
+                     data.frame(., cellID = rownames(.)),
+                   by = "cellID")
 
-marker_expr <- data.frame(GeneID = rownames(marker_expr), marker_expr) %>%
-  tidyr::pivot_longer(-GeneID, names_to = "CB", values_to = "nUMIs") %>%
-  dplyr::mutate(CB = stringr::str_replace(CB, "\\.", "-")) %>%
-  dplyr::inner_join(data.frame(CB = rownames(seuratObject@meta.data), 
-                               Celltype = seuratObject@meta.data$manual_l3), 
-                    by = "CB") %>%
-  dplyr::mutate(Celltype = factor(Celltype), 
-                GeneID = factor(GeneID),
-                Celltype = factor(Celltype, manual_l3_order))
-
-plotobj <- marker_expr %>% 
-  ggplot(aes(x = Celltype, y = nUMIs)) +
-  geom_jitter_rast(alpha = 0.25) +
-  geom_boxplot(outlier.shape = NA, alpha = 0.5) +
-  #geom_violin() +
-  facet_wrap(~GeneID, nrow = 2, ncol = 1) +
+boxplot_ggplot2 <- expression_df %>%
+  ggplot(aes(x = forcats::fct_reorder(manual_l3, -expression), y = expression)) +
+  geom_boxplot(alpha = 0.5, outlier.shape = NA) +
+  geom_point_rast(position = position_dodge(width=0.75), alpha = 0.5) +
+  labs(y = "Expression") +
+  facet_wrap(~ProteinID, nrow = 2, scales = "free_y") +
   theme_bw() +
-  theme(legend.pos = "bottom", 
+  theme(panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank(),
         axis.title.x = element_blank(),
-        axis.ticks.x = element_blank(),
-        axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1),
-        axis.title.y = element_blank(),
-        axis.ticks.y = element_blank(),
-        panel.grid.major = element_blank(), 
-        panel.grid.minor = element_blank())
+        legend.pos = "bottom",
+        axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
 
-
-pdf(width = 10, height = 5, file = dotplot_pdf)
-print(plotobj)
+pdf(width = 20, height = 10, file = boxplot_pdf)
+print(boxplot_ggplot2)
 dev.off()
 
-png(width = 10, height = 5, units = "in", res = 120, file = dotplot_png)
-print(plotobj)
-dev.off()
+sessionInfo()

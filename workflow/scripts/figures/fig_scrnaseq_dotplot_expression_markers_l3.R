@@ -1,6 +1,6 @@
 #!/usr/bin/env Rscript
 
-# The goal of this script is to create a boxplot of l1 relative to all PBMCs grouped by response and facetted by lineage.
+# The goal of this script is to create a dotplot of the canonical markers for all celltypes (l3).
 
 library(Seurat)
 library(dplyr)
@@ -20,8 +20,8 @@ dotplot_pdf <- args[3]
 
 seuratObject <- readRDS(seurat_rds)
 
-manual_l3_order <- readxl::read_excel(manual_l3_order_xlsx, col_names = F) %>%
-  pull(`...1`)
+manual_l3_order <- readxl::read_excel(manual_l3_order_xlsx, col_names = T) %>%
+  pull(Celltype)
 
 marker_expr <- GetAssayData(seuratObject, assay = "RNA")[which(rownames(GetAssayData(seuratObject, assay = "RNA")) %in% marker_genes), ]
 
@@ -41,7 +41,7 @@ marker_expr_median <- data.frame(GeneID = rownames(marker_expr), marker_expr) %>
                 Celltype = factor(Celltype, manual_l3_order),
                 GeneID = factor(GeneID, marker_genes))
 
-plotobj <- marker_expr_median %>% 
+dotplot_ggplot2 <- marker_expr_median %>% 
   ggplot(aes(x = GeneID, y = Celltype, col = Median)) +
   geom_tile(alpha = 0, col = "grey") +
   geom_point(aes(size = Percentage)) +
@@ -59,7 +59,7 @@ plotobj <- marker_expr_median %>%
 
 
 pdf(width = 10.5, height = 7.5, file = dotplot_pdf)
-print(plotobj)
+print(dotplot_ggplot2)
 dev.off()
 
 sessionInfo()

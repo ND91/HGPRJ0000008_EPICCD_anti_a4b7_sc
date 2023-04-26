@@ -33,47 +33,74 @@ lookup_fbc = pd.DataFrame(list(zip(scrnaseq_files_df['Run_ID'],
 # CD14+ monocyte brnaseq files
 brnaseq_files_df = pd.read_excel(config['brnaseq_files'], header=0)
 
-brnaseq_filedata = pd.concat([pd.Series(pd.concat([brnaseq_files_df['Basename'].astype(str) + '_R1', brnaseq_files_df['Basename'].astype(str) + '_R2', brnaseq_files_df['Basename'].astype(str) + '_UMI']), name = 'old_path'), 
-                              pd.Series(pd.concat([brnaseq_files_df['Sample_ID'].astype(str) + '_R1', brnaseq_files_df['Sample_ID'].astype(str) + '_R2', brnaseq_files_df['Sample_ID'].astype(str) + '_UMI']), name = 'new_path')], 
+brnaseq_fastq_df = pd.concat([pd.Series(pd.concat([brnaseq_files_df['Basename'].astype(str) + '_R1', brnaseq_files_df['Basename'].astype(str) + '_R2', brnaseq_files_df['Basename'].astype(str) + '_UMI']), name = 'old_path'), 
+                              pd.Series(pd.concat([brnaseq_files_df['Sample_ID'].astype(str) + '_R1', brnaseq_files_df['Sample_ID'].astype(str) + '_R2', brnaseq_files_df['Sample_ID'].astype(str) + '_UMI']), name = 'file')], 
                              axis=1)
-  
-brnaseq_read_files = brnaseq_filedata['new_path'].tolist()
+
+brnaseq_fastq_df = brnaseq_fastq_df.drop_duplicates()
+brnaseq_fastq_fns = brnaseq_fastq_df['file'].tolist()
+brnaseq_sampleIDs = brnaseq_files_df['Sample_ID'].tolist()
+
+#print(brnaseq_fastq_df)
+#print(brnaseq_fastq_fns)
+#print(brnaseq_fastq_df['old_path'].tolist())
 
 basedir = config['base_dir']
 
 # Rules
-include: "rules/general.smk"
-include: "rules/scrnaseq.smk"
-include: "rules/masscytometry.smk"
+include: "rules/pbmc_scrnaseq.smk"
+include: "rules/pbmc_masscytometry.smk"
+include: "rules/cd14monocyte_brnaseq.smk"
 include: "rules/figures.smk"
-#include: "rules/brnaseq.smk"
 
 wildcard_constraints:
   scrnaseq_fastq_fn='|'.join([re.escape(x) for x in scrnaseq_fastq_fns]),
   run_fbc='|'.join([re.escape(x) for x in run_fbcs]),
+  brnaseq_fastq_fn='|'.join([re.escape(x) for x in brnaseq_fastq_fns]),
+  brnaseq_sampleID='|'.join([re.escape(x) for x in brnaseq_sampleIDs]),
 
 rule all:
   input:
-    ##scRNAseq
+    ## scRNAseq
     #expand("resources/scrnaseq/fastq/{scrnaseq_fastq_fn}", scrnaseq_fastq_fn=scrnaseq_fastq_fns),
     #"resources/scrnaseq/reference_genome",
-    #expand("output/scrnaseq/cellranger/{run_fbc}/outs/filtered_feature_bc_matrix", run_fbc=run_fbcs)
-    #expand("{basedir}/output/scrnaseq/normalized/{run_fbc}_normalized_SeuratObject.Rds", basedir=basedir, run_fbc=run_fbcs)
+    #expand("output/scrnaseq/cellranger/{run_fbc}/outs/filtered_feature_bc_matrix", run_fbc=run_fbcs),
+    expand("{basedir}/output/scrnaseq/cellranger/{run_fbc}", basedir=basedir, run_fbc=run_fbcs),
+    #expand("{basedir}/output/scrnaseq/normalized/{run_fbc}_normalized_SeuratObject.Rds", basedir=basedir, run_fbc=run_fbcs),
     #expand("{basedir}/output/scrnaseq/cell_metadata/annotated_SeuratObject.Rds", basedir=basedir),
     #expand("{basedir}/output/scrnaseq/clustered/clustered_SeuratObject.Rds", basedir=basedir),
     #expand("{basedir}/output/scrnaseq/da/dacs.csv", basedir=basedir),
     #expand("{basedir}/output/scrnaseq/de/degs.Rds", basedir=basedir),
+    expand("{basedir}/output/scrnaseq/pseudobulk/pbmc_pb_dds.Rds", basedir=basedir),
+    ## Mass cytometry
+    expand("{basedir}/output/masscytometry/da/dacs.csv", basedir=basedir),
+    #expand("{basedir}/output/masscytometry/cell_metadata/sce_annotated.Rds", basedir=basedir),
+    #expand("{basedir}/output/masscytometry/dimred/sce_dimred.Rds", basedir=basedir),
+    ## CD14+ monocyte bulk RNAseq
+    #expand("resources/brnaseq/fastq/{brnaseq_fastq_fn}.fastq.gz", brnaseq_fastq_fn=brnaseq_fastq_fns),
+    #"resources/brnaseq/reference_genome",
+    #expand("output/fastqc/{brnaseq_fastq_fn}", brnaseq_fastq_fn=brnaseq_fastq_fns),
+    #expand("resources/brnaseq/fastq_umi/{brnaseq_sampleID}_umi_R1.fastq.gz", brnaseq_sampleID=brnaseq_sampleIDs),
+    #expand("output/brnaseq/bam/{brnaseq_sampleID}/{brnaseq_sampleID}_pe_Aligned.sortedByCoord.out.bam", brnaseq_sampleID=brnaseq_sampleIDs),
+    #expand("output/brnaseq/bam/{brnaseq_sampleID}/{brnaseq_sampleID}_filtered.bam", brnaseq_sampleID=brnaseq_sampleIDs),
+    #expand("output/brnaseq/bam/{brnaseq_sampleID}/{brnaseq_sampleID}_filtered.bam.bai", brnaseq_sampleID=brnaseq_sampleIDs),
+    #expand("output/brnaseq/bam/{brnaseq_sampleID}/{brnaseq_sampleID}_filtered_deduplicated.bam", brnaseq_sampleID=brnaseq_sampleIDs),
+    #"output/brnaseq/bam/STAR.log",
+    #"output/brnaseq/counts/counts.txt",
+    #"output/brnaseq/multiqc",
+    #expand("{basedir}/output/brnaseq", basedir=basedir),
+    expand("{basedir}/output/brnaseq/counts/counts_cleaned_se.rds", basedir=basedir),
+    ## Figures
+    ### Fig1
     expand("{basedir}/output/figures/scrnaseq_umap_pbmc.pdf", basedir=basedir),
     expand("{basedir}/output/figures/scrnaseq_dotplot_markers.pdf", basedir=basedir),
+    expand("{basedir}/output/figures/masscytometry_umap_pbmc.pdf", basedir=basedir),
+    expand("{basedir}/output/figures/masscytometry_heatmap_markers_l3.pdf", basedir=basedir),
+    expand("{basedir}/output/figures/scrnaseq_masscytometry_scatterplot_abundance_l3rl0_colmanuall1.pdf", basedir=basedir),
+    expand("{basedir}/output/figures/scrnaseq_umap_pbmc_ITGA4_ITGB7.pdf", basedir=basedir),
+    expand("{basedir}/output/figures/masscytometry_umap_pbmc_ITGA4_A4B7.pdf", basedir=basedir),
+    ### Fig2
     expand("{basedir}/output/figures/scrnaseq_boxplot_abundance_l3rl0.pdf", basedir=basedir),
+    expand("{basedir}/output/figures/massytometry_boxplot_abundance_l3rl0.pdf", basedir=basedir),
+    ### Fig3
     expand("{basedir}/output/figures/scrnaseq_arrowplot_degs.pdf", basedir=basedir),
-    ##Mass cytometry
-    expand("{basedir}/output/masscytometry/da/dacs.csv", basedir=basedir),
-    expand("{basedir}/output/masscytometry/cell_metadata/sce_annotated.Rds", basedir=basedir),
-    expand("{basedir}/output/masscytometry/clustered/sce_clustered.Rds", basedir=basedir),
-    ##CD14+ monocyte bulk RNAseq
-    #expand("{basedir}/output/brnaseq/fastqc/{readfile}/{readfile}_fastqc.zip", readfile=readfiles),
-    #expand("{basedir}/output/brnaseq/bam/{sampleID}/{sampleID}_filtered_deduplicated.bam.bai", sampleID=sampleIDs),
-    #"{basedir}/output/brnaseq/bam/STAR.log",
-    #"{basedir}/output/brnaseq/counts/counts.txt",
-    #"{basedir}/output/brnaseq/multiqc"

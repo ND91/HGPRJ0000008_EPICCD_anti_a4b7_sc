@@ -2,8 +2,8 @@
 # The goal of this script is to import the masscytometry data from Jan Verhoeff, convert it to a SCE object, harmonize the nomenclature with the scRNAseq experiment, and add sample and donor metadata.
 
 args <- commandArgs(trailingOnly = TRUE)
-if (length(args) != 4) {
-  stop(paste0("Script needs 4 arguments. Current input is:", args))
+if (length(args) != 5) {
+  stop(paste0("Script needs 5 arguments. Current input is:", args))
 }
 
 library(Matrix)
@@ -41,7 +41,7 @@ event_metadata_annotated <- masscytometry %>%
       Phenotype %in% c("Naive CD4 TCells") ~ "CD4 naive",
       Phenotype %in% c("Naive CD8 TCells") ~ "CD8 naive",
       Phenotype %in% c("NK CD16- CD27+") ~ "NK CD16-CD27+",
-      Phenotype %in% c("pDCs") ~ "PDC",
+      Phenotype %in% c("pDCs") ~ "CDC2", # Having had a look at the annotation, I don't think they are pDCs given that they also express several markers atypical thereof.
       Phenotype %in% c("Doublets", "HLA-DR+ CD3+ CD14dim - possible doublets") ~ "Multiplet",
       Phenotype %in% c("Lin negative - CD45RO+ CD25+") ~ "Lin-CD45RO+CD25+",
       Phenotype %in% c("Lin negative - CD69++ CCR4+ a4b7+") ~ "Lin-CD69++CCR4+a4b7+",

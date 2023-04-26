@@ -3,6 +3,7 @@
 # The goal of this script is to create a scatterplot of l3 relative to all PBMCs for all individuals with the scRNAseq data on the x-axis and the mass cytometry data on the y-axis colored by l1.
 
 library(Seurat)
+library(SingleCellExperiment)
 library(dplyr)
 library(ggplot2)
 library(ggrastr)
@@ -35,15 +36,16 @@ scrnaseq_l3rl0_df <- seuratObject@meta.data %>%
                 Ncells_scrnaseq = Ncells,
                 Ncellprop_scrnaseq = Ncellprop)
 
-masscytometry_l3rl0_df <- masscytometry %>%
-        dplyr::mutate(manual_l3 = as.factor(manual_l3)) %>%
-        dplyr::group_by(Sample_ID, Response, manual_l3, .drop = F) %>%
-        dplyr::summarize(Nl3sample = n()) %>%
-        dplyr::ungroup() %>%
-        dplyr::group_by(Sample_ID, Response) %>%
-        dplyr::mutate(Ncells = sum(Nl3sample),
-                      Ncellprop = Nl3sample/Ncells,
-                      Ncellprop = ifelse(is.na(Ncellprop), 0, Ncellprop)) %>%
+masscytometry_l3rl0_df <- colData(masscytometry) %>%
+  data.frame() %>%
+  dplyr::mutate(manual_l3 = as.factor(manual_l3)) %>%
+  dplyr::group_by(Sample_ID, Response, manual_l3, .drop = F) %>%
+  dplyr::summarize(Nl3sample = n()) %>%
+  dplyr::ungroup() %>%
+  dplyr::group_by(Sample_ID, Response) %>%
+  dplyr::mutate(Ncells = sum(Nl3sample),
+                Ncellprop = Nl3sample/Ncells,
+                Ncellprop = ifelse(is.na(Ncellprop), 0, Ncellprop)) %>%
   dplyr::rename(Nl3sample_masscytometry = Nl3sample,
                 Ncells_masscytometry = Ncells,
                 Ncellprop_masscytometry = Ncellprop)
@@ -53,7 +55,7 @@ scrnaseq_masscytometry_l3rl0_df <- scrnaseq_l3rl0_df %>%
 
 cor_stats <- summary(lm(Ncellprop_scrnaseq ~ Ncellprop_masscytometry, data = scrnaseq_masscytometry_l3rl0_df))
 
-plotobj <- scrnaseq_masscytometry_l3rl0_df %>%
+scatterplot_ggobj <- scrnaseq_masscytometry_l3rl0_df %>%
   ggplot(aes(x = Ncellprop_scrnaseq*100, y = Ncellprop_masscytometry*100)) +
   geom_smooth(method=lm, level=0.99) +
   geom_point() +
@@ -70,6 +72,6 @@ plotobj <- scrnaseq_masscytometry_l3rl0_df %>%
         legend.pos = "bottom")
 
 pdf(width = 5, height = 5, file = scatterplot_pdf)
-print(plotobj)
+print(scatterplot_ggobj)
 dev.off()
 
