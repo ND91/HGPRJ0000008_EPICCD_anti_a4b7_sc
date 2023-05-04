@@ -3,14 +3,17 @@
 # The goal of this script is to perform pseudobulk differential expression analysis on the different celltypes.
 
 library(Seurat)
+library(dplyr)
+library(DESeq2)
 
 args <- commandArgs(trailingOnly = TRUE)
-if (length(args) != 2) {
-  stop(paste0("Script needs 2 arguments. Current input is:", args))
+if (length(args) != 3) {
+  stop(paste0("Script needs 3 arguments. Current input is:", args))
 }
 
 seurat_rds <- args[1]
-degs_list_rds <- args[2]
+level <- args[2]
+degs_list_rds <- args[3]
 
 seuratDE <- function(seuratobj, cellsampleID, cellclusterID = NULL, sampleinfo, design, contrast = NULL, name = NULL){
   # seuratDE is a function to perform pseudobulk differential expression on all celltypes in a column listed in one of the SeuratObject columns. It essentially creates a pseudobulk dataset and wraps around DESeq2 to perform DE analyses.
@@ -84,12 +87,20 @@ pb_sample_metadata <- seuratObject@meta.data %>%
   dplyr::mutate(Response_coded = ifelse(Response == "Responder", "R", "NR"))
 rownames(pb_sample_metadata) <- pb_sample_metadata$SampleID
 
-degs_rvnr <- seuratDE(seuratobj = seuratObject, 
-                      cellsampleID = "SampleID", 
-                      #cellclusterID = "manual_l3", 
-                      sampleinfo = pb_sample_metadata, 
-                      design = "~Response_coded+Sex+Age", 
-                      contrast = c("Response_coded", "R", "NR"))
+if(level != "manual_l0"){
+  degs_rvnr <- seuratDE(seuratobj = seuratObject, 
+                        cellsampleID = "SampleID", 
+                        cellclusterID = level, 
+                        sampleinfo = pb_sample_metadata, 
+                        design = "~Response_coded", 
+                        contrast = c("Response_coded", "R", "NR"))
+} else{
+  degs_rvnr <- seuratDE(seuratobj = seuratObject, 
+                        cellsampleID = "SampleID", 
+                        sampleinfo = pb_sample_metadata, 
+                        design = "~Response_coded", 
+                        contrast = c("Response_coded", "R", "NR"))
+}
 
 degs_rvnr <- degs_rvnr[lapply(degs_rvnr, length) != 0]
 

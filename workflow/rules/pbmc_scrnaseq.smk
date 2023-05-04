@@ -167,7 +167,7 @@ rule scrnaseq_normalization:
     lowerbound_numis=600,
   shell:
     """
-    Rscript workflow/scripts/scrnaseq/normalization.R "{input.count_mtx}" "{output.seurat_rds}" "{params.run_fbc}" "{params.lowerbound_numis}" &> "{log}"
+    Rscript workflow/scripts/scrnaseq/pbmc_normalization.R "{input.count_mtx}" "{output.seurat_rds}" "{params.run_fbc}" "{params.lowerbound_numis}" &> "{log}"
     """
 
 rule scrnaseq_celltype_annotation:
@@ -192,7 +192,7 @@ rule scrnaseq_celltype_annotation:
     run_fbc="{run_fbc}",
   shell:
     """
-    Rscript -e "rmarkdown::render('workflow/scripts/scrnaseq/celltype_annotation.Rmd', knit_root_dir = "${{PWD}}")" &> "{log}"
+    Rscript -e "rmarkdown::render('workflow/scripts/scrnaseq/pbmc_celltype_annotation.Rmd', knit_root_dir = "{basedir}")" &> "{log}"
     """
 
 rule scrnaseq_sample_demultiplex:
@@ -216,7 +216,7 @@ rule scrnaseq_sample_demultiplex:
     run_fbc="{run_fbc}",
   shell:
     """
-    Rscript -e "rmarkdown::render('workflow/scripts/scrnaseq/sample_demultiplex.Rmd', knit_root_dir = "${{PWD}}")" &> "{log}"
+    Rscript -e "rmarkdown::render('workflow/scripts/scrnaseq/pbmc_sample_demultiplex.Rmd', knit_root_dir = "{basedir}")" &> "{log}"
     """
 
 rule scrnaseq_integrate_annotations:
@@ -241,7 +241,7 @@ rule scrnaseq_integrate_annotations:
     mem_mb=47000,
   shell:
     """
-    Rscript workflow/scripts/scrnaseq/merge_annotations.R "{input.seurat_rds}" "{input.seurat_demultiplex_csv}" "{input.seurat_annotated_csv}" "{input.sample_metadata_csv}" "{output.seurat_annotated_rds}" &> "{log}"
+    Rscript workflow/scripts/scrnaseq/pbmc_merge_annotations.R "{input.seurat_rds}" "{input.seurat_demultiplex_csv}" "{input.seurat_annotated_csv}" "{input.sample_metadata_csv}" "{output.seurat_annotated_rds}" &> "{log}"
     """
     
 rule scrnaseq_clustering:
@@ -264,7 +264,7 @@ rule scrnaseq_clustering:
     mem_mb=47000,
   shell:
     """
-    Rscript workflow/scripts/scrnaseq/clustering.R "{input.seurat_annotated_rds}" "{output.seurat_clustered_rds}" "{output.umap_csv}" &> "{log}"
+    Rscript workflow/scripts/scrnaseq/pbmc_clustering.R "{input.seurat_annotated_rds}" "{output.seurat_clustered_rds}" "{output.umap_csv}" &> "{log}"
     """
 
 rule monocyte_subsetting:
@@ -318,44 +318,22 @@ rule scrnaseq_differential_expression:
   input:
     seurat_annotated_rds="{basedir}/output/scrnaseq/clustered/clustered_SeuratObject.Rds",
   output:
-    degs_list_rds="{basedir}/output/scrnaseq/de/degs_list.Rds",
+    degs_list_rds="{basedir}/output/scrnaseq/de/degs_{level}_list.Rds",
   threads: 
     1
   conda:
     "../envs/r-deseq2.yaml",
   log:
-    "{basedir}/output/scrnaseq/de/scrnaseq_differential_expression.log",
+    "{basedir}/output/scrnaseq/de/scrnaseq_differential_expression_{level}.log",
   message:
     "--- scRNAseq: Differential expression analyses per celltype ---",
   benchmark:
-    "{basedir}/output/scrnaseq/de/scrnaseq_differential_expression_benchmark.txt",
+    "{basedir}/output/scrnaseq/de/scrnaseq_differential_expression_{level}_benchmark.txt",
   resources:
     mem_mb=47000,
+  params:
+    level="{level}",
   shell:
     """
-    Rscript workflow/scripts/scrnaseq/differential_expression.R "{input.seurat_annotated_rds}" "{output.degs_list_rds}" &> "{log}"
-    """
-    
-rule scrnaseq_pbmc_pseudobulk_differential_expression:
-  input:
-    seurat_annotated_rds="{basedir}/output/scrnaseq/clustered/clustered_SeuratObject.Rds",
-  output:
-    dds_rds="{basedir}/output/scrnaseq/pseudobulk/pbmc_pb_dds.Rds",
-    rld_rds="{basedir}/output/scrnaseq/pseudobulk/pbmc_pb_rld.Rds",
-    degs_csv="{basedir}/output/scrnaseq/pseudobulk/pbmc_RvNR_degs.csv",
-  threads: 
-    1
-  conda:
-    "../envs/r-deseq2.yaml",
-  log:
-    "{basedir}/output/scrnaseq/pseudobulk/pbmc_pseudobulk_differential_expression.log",
-  message:
-    "--- scRNAseq: Differential expression analyses on all PBMCs together ---",
-  benchmark:
-    "{basedir}/output/scrnaseq/pseudobulk/pbmc_pseudobulk_differential_expression_benchmark.txt",
-  resources:
-    mem_mb=47000,
-  shell:
-    """
-    Rscript workflow/scripts/scrnaseq/pbmc_pseudobulk_differential_expression.R "{input.seurat_annotated_rds}" "{output.dds_rds}" "{output.rld_rds}" "{output.degs_csv}" &> "{log}"
+    Rscript workflow/scripts/scrnaseq/pbmc_pseudobulk_differential_expression.R "{input.seurat_annotated_rds}" "{params.level}" "{output.degs_list_rds}" &> "{log}"
     """

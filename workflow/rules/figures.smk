@@ -190,7 +190,7 @@ rule fig_scrnaseq_boxplot_abundance_l3rl0_groupresponse:
 
 rule fig_masscytometry_boxplot_abundance_l3rl0_groupresponse:
   input:
-    masscytometry_annotated_rds="{basedir}/output/masscytometry/cell_metadata/masscytometry_annotated.Rds",
+    masscytometry_annotated_rds="{basedir}/output/masscytometry/cell_metadata/sce_annotated.Rds",
   output:
     boxplot_pdf="{basedir}/output/figures/masscytometry_boxplot_abundance_l3rl0_groupresponse.pdf",
   threads:
@@ -269,4 +269,55 @@ rule fig_scrnaseq_arrowplot_degs:
   shell:
     """
     Rscript workflow/scripts/figures/fig_scrnaseq_arrowplot_degs.R "{input.degs_rds}" "{input.manual_l3_order_xlsx}" "{output.arrowplot_degs_pdf}" &> "{log}"
+    """
+
+# Manuscript
+
+rule fig2:
+  input:
+    seurat_rds="{basedir}/output/scrnaseq/clustered/clustered_SeuratObject.Rds",
+    sce_dimred_ss_rds="{basedir}/output/masscytometry/dimred/sce_dimred_ss.Rds",
+    manual_l3_order_xlsx=config['manual_l3_order'],
+  output:
+    fig2_pdf="{basedir}/output/figures/fig2.pdf",
+  threads:
+    1
+  conda:
+    "../envs/r-seurat.yaml"
+  log:
+    "{basedir}/output/figures/fig2.log",
+  benchmark:
+    "{basedir}/output/figures/fig2_benchmark.txt",
+  resources:
+    mem_mb=47000,
+  shell:
+    """
+    Rscript workflow/scripts/figures/fig2.R "{input.seurat_rds}" "{input.sce_dimred_ss_rds}" "{input.manual_l3_order_xlsx}" "{output.fig2_pdf}" &> "{log}"
+    """
+
+rule fig3:
+  input:
+    seurat_rds="{basedir}/output/scrnaseq/clustered/clustered_SeuratObject.Rds",
+    scrnaseq_dacs_csv="{basedir}/output/scrnaseq/da/dacs.csv",
+    scrnaseq_degs_list_rds="{basedir}/output/scrnaseq/de/degs_manual_l3_list.Rds",
+    gse134809_seurat_rds="{basedir}/output/gse134809/annotated/gse134809_annotated_SeuratObject.Rds",
+    facs_flowexample_png="{basedir}/resources/flowcytometry/fig3c.png",
+    facs_proportions_csv="{basedir}/output/flowcytometry/celltype_percentages.csv",
+    facs_dacs_csv="{basedir}/output/flowcytometry/da/dacs.csv",
+    manual_l3_order_xlsx=config['manual_l3_order'],
+  output:
+    fig3_pdf="{basedir}/output/figures/fig3.pdf",
+  threads:
+    1
+  conda:
+    "../envs/r-seurat.yaml"
+  log:
+    "{basedir}/output/figures/fig3.log",
+  benchmark:
+    "{basedir}/output/figures/fig3_benchmark.txt",
+  resources:
+    mem_mb=47000,
+  shell:
+    """
+    Rscript workflow/scripts/figures/fig3.R "{input.seurat_rds}" "{input.scrnaseq_dacs_csv}" "{input.scrnaseq_degs_list_rds}" "{input.gse134809_seurat_rds}" "{input.facs_flowexample_png}" "{input.facs_proportions_csv}" "{input.facs_dacs_csv}" "{input.manual_l3_order_xlsx}" "{output.fig3_pdf}" &> "{log}"
     """

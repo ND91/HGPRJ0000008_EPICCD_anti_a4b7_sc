@@ -18,10 +18,12 @@ umap_ss_csv <- args[4]
 
 sce_annotated <- readRDS(sce_annotated_rds)
 
-set.seed(796318)
-cells_ss <- sample(ncol(masscytometry_sce), size = nsubsample, replace = F)
+sce_annotated_ol <- sce_annotated[,which(colData(sce_annotated)$PBMC_scrnaseq == "Yes")]
 
-sce_dimred_ss <- sce_annotated[,cells_ss]
+set.seed(796318)
+cells_ss <- sample(ncol(sce_annotated_ol), size = nsubsample, replace = F)
+
+sce_dimred_ss <- sce_annotated_ol[,cells_ss]
 umap_df <- DataFrame(scater::calculateUMAP(sce_dimred_ss, exprs_values = "ncounts") %>%
                        data.frame() %>%
                        dplyr::rename(UMAP_1 = 1,

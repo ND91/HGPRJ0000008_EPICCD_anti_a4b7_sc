@@ -12,10 +12,11 @@ library(Seurat)
 library(SingleCellExperiment)
 library(viridis)
 library(ComplexHeatmap)
+library(scales)
 
 args <- commandArgs(trailingOnly = TRUE)
-if (length(args) != 3) {
-  stop(paste0("Script needs 3 arguments. Current input is:", args))
+if (length(args) != 4) {
+  stop(paste0("Script needs 4 arguments. Current input is:", args))
 }
 
 seurat_rds <- args[1]
@@ -64,7 +65,8 @@ fig2A <- ggplot(scrnaseq_umap_df, aes(x = UMAP_1, y = UMAP_2, col = manual_l3_w_
                    mapping = aes(label = manual_l3_number, x = x, y = y, fill = manual_l3_w_number),
                    alpha = 0.75, 
                    show.legend = F,
-                   col = "black") +
+                   col = "black", 
+                   max.overlaps = 100) +
   guides(colour = guide_legend(override.aes = list(size = 3))) +
   scale_color_manual(values = manual_l3_colors, drop = F) +
   scale_fill_manual(values = manual_l3_colors, drop = F) +
@@ -96,7 +98,8 @@ fig2B <- ggplot(masscytometry_umap_df, aes(x = UMAP_1, y = UMAP_2, col = manual_
                    mapping = aes(label = manual_l3_number, x = x, y = y, fill = manual_l3_w_number),
                    alpha = 0.75, 
                    show.legend = F,
-                   col = "black") +
+                   col = "black", 
+                   max.overlaps = 100) +
   guides(colour = guide_legend(override.aes = list(size = 3))) +
   scale_color_manual(values = manual_l3_colors, drop = F) +
   scale_fill_manual(values = manual_l3_colors, drop = F) +
@@ -172,22 +175,39 @@ masscytometry_marker_expr_median <- data.frame(protein = rownames(masscytometry_
                 Celltype = factor(Celltype, manual_l3_order$Celltype),
                 protein = factor(protein, masscytometry_marker_proteins))
 
-masscytometry_marker_expr_median_wide <- masscytometry_marker_expr_median %>%
-  tidyr::pivot_wider(-Percentage, names_from = Celltype, values_from = Median)
-masscytometry_marker_expr_median_wide_df <- data.frame(masscytometry_marker_expr_median_wide[,-1], row.names = masscytometry_marker_expr_median_wide$protein)
-colnames(masscytometry_marker_expr_median_wide_df) <- colnames(masscytometry_marker_expr_median_wide)[-1]
+fig2D <- masscytometry_marker_expr_median %>%
+  dplyr::filter(protein %in% c("CD45", "CD45RA", "CD45RO", "CD2", "CD3", "CCR7", "CD27", "CD8A", "ITGAL", "CES1", "CD44", "CD4", "CD5", "IL7RA", "ITGA4", "CD57", "KLRB1", "HLADR", "CD14", "CD16")) %>%
+  dplyr::mutate(protein = factor(protein, levels = c("CD45", "CD45RA", "CD45RO", "CD2", "CD3", "CCR7", "CD27", "CD8A", "ITGAL", "CES1", "CD44", "CD4", "CD5", "IL7RA", "ITGA4", "CD57", "KLRB1", "HLADR", "CD14", "CD16"))) %>%
+  ggplot(aes(x = protein, y = Celltype, fill = Median)) +
+  geom_tile() +
+  scale_fill_viridis() +
+  theme_bw() +
+  theme(legend.pos = "bottom", 
+        axis.title.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1),
+        axis.title.y = element_blank(),
+        axis.ticks.y = element_blank(),
+        panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.spacing.x=unit(0, "lines"))
 
-masscytometry_overlapping_celltypes <- manual_l3_order$Celltype[manual_l3_order$Celltype %in% colnames(masscytometry_marker_expr_median_wide_df)]
-
-masscytometry_marker_expr_median_wide_df <- t(masscytometry_marker_expr_median_wide_df[,masscytometry_overlapping_celltypes])
-masscytometry_marker_expr_median_wide_df <- masscytometry_marker_expr_median_wide_df[nrow(masscytometry_marker_expr_median_wide_df):1,]
-
-fig2D <- ComplexHeatmap::pheatmap(masscytometry_marker_expr_median_wide_df, 
-                                  scale = "column",
-                                  color = viridis(1000),
-                                  cluster_rows = F,
-                                  row_names_side = "left",
-                                  name = "arcsinh(5)")
+# masscytometry_marker_expr_median_wide <- masscytometry_marker_expr_median %>%
+#   tidyr::pivot_wider(-Percentage, names_from = Celltype, values_from = Median)
+# masscytometry_marker_expr_median_wide_df <- data.frame(masscytometry_marker_expr_median_wide[,-1], row.names = masscytometry_marker_expr_median_wide$protein)
+# colnames(masscytometry_marker_expr_median_wide_df) <- colnames(masscytometry_marker_expr_median_wide)[-1]
+# 
+# masscytometry_overlapping_celltypes <- manual_l3_order$Celltype[manual_l3_order$Celltype %in% colnames(masscytometry_marker_expr_median_wide_df)]
+# 
+# masscytometry_marker_expr_median_wide_df <- t(masscytometry_marker_expr_median_wide_df[,masscytometry_overlapping_celltypes])
+# masscytometry_marker_expr_median_wide_df <- masscytometry_marker_expr_median_wide_df[nrow(masscytometry_marker_expr_median_wide_df):1,]
+# 
+# fig2D <- as.ggplot(ComplexHeatmap::pheatmap(masscytometry_marker_expr_median_wide_df, 
+#                                             #scale = "column",
+#                                             color = viridis(1000),
+#                                             cluster_rows = F,
+#                                             row_names_side = "left"))
 
 # Fig2E
 
@@ -222,31 +242,31 @@ masscytometry_l3rl0_df <- colData(masscytometry_sce) %>%
 scrnaseq_masscytometry_l3rl0_df <- scrnaseq_l3rl0_df %>%
   dplyr::full_join(masscytometry_l3rl0_df, by = c("Sample_ID", "manual_l3", "Response"))
 
-cor_stats <- summary(lm(Ncellprop_scrnaseq ~ Ncellprop_masscytometry, data = scrnaseq_masscytometry_l3rl0_df))
+cor_stats <- cor.test(scrnaseq_masscytometry_l3rl0_df$Ncellprop_scrnaseq, scrnaseq_masscytometry_l3rl0_df$Ncellprop_masscytometry)
 
-scatterplot_ggobj <- scrnaseq_masscytometry_l3rl0_df %>%
+fig2E <- scrnaseq_masscytometry_l3rl0_df %>%
   ggplot(aes(x = Ncellprop_scrnaseq*100, y = Ncellprop_masscytometry*100)) +
   geom_smooth(method=lm, level=0.99) +
   geom_point() +
   labs(title = "Correlation scRNAseq and CyTOF",
-       subtitle = "% PBMCs",
+       subtitle = paste0("Pearson correlation = ", round(cor_stats$estimate, 2)),
        x = "scRNAseq",
        y = "CyTOF") +
-  scale_x_log10(breaks = trans_breaks("log10", function(x) 10^x), labels = trans_format("log10", math_format(10^.x))) +
-  scale_y_log10(breaks = trans_breaks("log10", function(x) 10^x), labels = trans_format("log10", math_format(10^.x))) +
+  scale_x_log10(breaks = scales::trans_breaks("log10", function(x) 10^x), labels = scales::trans_format("log10", math_format(10^.x))) +
+  scale_y_log10(breaks = scales::trans_breaks("log10", function(x) 10^x), labels = scales::trans_format("log10", math_format(10^.x))) +
   annotation_logticks() +
   theme_bw() +
   theme(panel.grid.major = element_blank(), 
         panel.grid.minor = element_blank(),
         legend.pos = "bottom")
 
-# Fig2F
+# Fig2F and G
 
 scrnaseq_itga4_itgb7_expr_df <- data.frame(CB = colnames(scrnaseq_seuratObject),
-                      Embeddings(scrnaseq_seuratObject[["umap"]]),
-                      expr = GetAssayData(scrnaseq_seuratObject)[c("ITGA4"),],
-                      gene = "ITGA4",
-                      scrnaseq_seuratObject@meta.data) %>%
+                                           Embeddings(scrnaseq_seuratObject[["umap"]]),
+                                           expr = GetAssayData(scrnaseq_seuratObject)[c("ITGA4"),],
+                                           gene = "ITGA4",
+                                           scrnaseq_seuratObject@meta.data) %>%
   dplyr::bind_rows(data.frame(CB = colnames(scrnaseq_seuratObject),
                               Embeddings(scrnaseq_seuratObject[["umap"]]),
                               expr = GetAssayData(scrnaseq_seuratObject)["ITGB7",],
@@ -257,43 +277,7 @@ scrnaseq_itga4_itgb7_expr_df <- data.frame(CB = colnames(scrnaseq_seuratObject),
                 expr_rank = rank(expr, ties.method="first"),
                 label = paste0("scRNAseq: ", gene))
 
-fig2F_left <- ggplot(scrnaseq_itga4_itgb7_expr_df, aes(x = UMAP_1, y = UMAP_2, order = expr_rank)) +
-  geom_point_rast(show.legend = F, size = 0.5, col = "#d3d3d3") +
-  geom_point_rast(data = scrnaseq_itga4_itgb7_expr_df %>%
-                    dplyr::filter(expr>0), aes(col = expr), show.legend = T, size = 0.5) +
-  labs(y = "",
-       x = "") +
-  guides(colour = guide_legend(override.aes = list(size = 3),
-                               title = "nUMIs")) +
-  facet_wrap(~label, nrow = 2, ncol = 1) +
-  scale_color_viridis() +
-  theme_bw() +
-  theme(panel.grid.major = element_blank(), 
-        panel.grid.minor = element_blank(),
-        legend.pos = "left",
-        axis.title.x = element_blank(),
-        axis.text.y = element_blank(),
-        axis.ticks.y = element_blank(),
-        strip.text.x = element_text(face = "bold"))
-
-fig2F_right <- ggplot(scrnaseq_itga4_itgb7_expr_df, aes(x = manual_l3, y = expr)) +
-  geom_jitter_rast(col = "#d3d3d3") +
-  geom_boxplot(alpha = 0.9, outlier.shape = NA) +
-  facet_wrap(~label, nrow = 2, ncol = 1, scales = "free_y") +
-  labs(y = "nUMIs") +
-  theme_bw() +
-  theme(panel.grid.major = element_blank(), 
-        panel.grid.minor = element_blank(),
-        legend.pos = "none",
-        axis.title.x = element_blank(),
-        strip.text.x = element_text(face = "bold"),
-        axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
-
-fig2F <- ggarrange(fig2F_left, fig2F_right, nrow = 1, ncol = 2, widths = c(0.75, 1), align = "hv")
-
-# Fig2G
-
-masscytometry_itga4_itgb7_expr_df <- data.frame(expr = assay(masscytometry_sce)[c("ITGA4"),], protein = "ITGA4", cellID = colnames(masscytometry_sce)) %>%
+masscytometry_itga4_expr_df <- data.frame(expr = assay(masscytometry_sce)[c("ITGA4"),], protein = "ITGA4", cellID = colnames(masscytometry_sce)) %>%
   dplyr::left_join(data.frame(colData(masscytometry_sce), reducedDims(masscytometry_sce)[[1]], cellID = colnames(masscytometry_sce)),
                    by = "cellID") %>%
   dplyr::left_join(manual_l3_order, by = c("manual_l3" = "Celltype")) %>%
@@ -302,15 +286,23 @@ masscytometry_itga4_itgb7_expr_df <- data.frame(expr = assay(masscytometry_sce)[
                 label = paste0("Mass cytometry: integrin a4"),
                 protein = factor(protein))
 
-fig2G_left <- ggplot(masscytometry_itga4_itgb7_expr_df, aes(x = UMAP_1, y = UMAP_2, order = expr_rank)) +
+scrnaseq_masscytometry_itga4_itgb7_itga4_expr_df <- scrnaseq_itga4_itgb7_expr_df %>%
+  dplyr::select(UMAP_1, UMAP_2, expr_rank, expr, manual_l3, label) %>%
+  dplyr::mutate(modality = "scRNAseq") %>%
+  dplyr::add_row(masscytometry_itga4_expr_df %>%
+                   dplyr::select(UMAP_1, UMAP_2, expr_rank, expr, manual_l3, label) %>%
+                   dplyr::mutate(modality = "Mass cytometry")) %>%
+  dplyr::mutate(label = factor(label, levels = c("scRNAseq: ITGA4", "scRNAseq: ITGB7", "Mass cytometry: integrin a4")))
+
+fig2FG_left <- ggplot(scrnaseq_masscytometry_itga4_itgb7_itga4_expr_df, aes(x = UMAP_1, y = UMAP_2, order = expr_rank)) +
   geom_point_rast(show.legend = F, size = 0.5, col = "#d3d3d3") +
-  geom_point_rast(data = masscytometry_itga4_itgb7_expr_df %>%
+  geom_point_rast(data = scrnaseq_masscytometry_itga4_itgb7_itga4_expr_df %>%
                     dplyr::filter(expr>0), aes(col = expr), show.legend = T, size = 0.5) +
   labs(y = "",
        x = "") +
   guides(colour = guide_legend(override.aes = list(size = 3),
-                               title = "expr")) +
-  facet_wrap(~label, nrow = 1, ncol = 1) +
+                               title = "Expression")) +
+  facet_wrap(~label, nrow = 3, ncol = 1) +
   scale_color_viridis() +
   theme_bw() +
   theme(panel.grid.major = element_blank(), 
@@ -321,12 +313,11 @@ fig2G_left <- ggplot(masscytometry_itga4_itgb7_expr_df, aes(x = UMAP_1, y = UMAP
         axis.ticks.y = element_blank(),
         strip.text.x = element_text(face = "bold"))
 
-fig2G_right <- ggplot(masscytometry_itga4_itgb7_expr_df, aes(x = manual_l3, y = expr)) +
+fig2FG_right <- ggplot(scrnaseq_masscytometry_itga4_itgb7_itga4_expr_df, aes(x = manual_l3, y = expr)) +
   geom_jitter_rast(col = "#d3d3d3") +
-  geom_boxplot(alpha = 0.9, outlier.shape = NA) +
-  facet_wrap(~label, nrow = 1, ncol = 1, scales = "free_y") +
+  geom_boxplot(alpha = 0.75, outlier.shape = NA) +
+  facet_wrap(~label, nrow = 3, ncol = 1, scales = "free_y") +
   labs(y = "nUMIs") +
-  scale_x_discrete(drop=FALSE) +
   theme_bw() +
   theme(panel.grid.major = element_blank(), 
         panel.grid.minor = element_blank(),
@@ -335,19 +326,26 @@ fig2G_right <- ggplot(masscytometry_itga4_itgb7_expr_df, aes(x = manual_l3, y = 
         strip.text.x = element_text(face = "bold"),
         axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
 
-fig2G <- ggarrange(fig2G_left, fig2G_right, nrow = 1, ncol = 2, widths = c(0.75, 1), align = "hv")
+fig2FG <- ggarrange(fig2FG_left, fig2FG_right, nrow = 1, ncol = 2, widths = c(0.75, 1), align = "hv")
 
 # Compiled
 
-fig2AB <- ggarrange(fig2A, fig2B, nrow = 2, ncol = 1, labels = c("A", "B"))
-fig2CD <- ggarrange(fig2C, fig2D, nrow = 2, ncol = 1, labels = c("C", "D"))
-fig2ABCDE <- ggarrange(fig2AB, fig2CD, fig2E, nrow = 1, ncol = 3, widths = c(0.5, 1, 1), labels = c("", "", "E"))
-fig2FG <- ggarrange(fig2F, fig2G, nrow = 2, ncol = 1, labels = c("F", "G"), heights = c(1, 0.5), align = "hv")
+fig2E_resized <- ggarrange(NULL, fig2E, NULL, nrow = 3, ncol = 1, heights = c(0.5, 1, 0.5))
 
-fig2 <- ggarrange(fig2ABCDE, fig2FG, nrow = 2, ncol = 1)
+fig2AB <- ggarrange(fig2A, fig2B, nrow = 2, ncol = 1, labels = c("A", "B"), common.legend = T, legend = "bottom", align = "hv")
+fig2DE <- ggarrange(fig2D, fig2E_resized, nrow = 1, ncol = 2, widths = c(1, 0.5), labels = c("D", "E"))
+fig2CDE <- ggarrange(fig2C, fig2DE, nrow = 2, ncol = 1, labels = c("C", ""))
 
-pdf(width = 11.7, height = 8.3, file = umap_pdf)
-print(plotobj)
+fig2FG <- ggarrange(fig2FG_left, fig2FG_right, nrow = 1, ncol = 2, widths = c(0.4, 1), align = "hv")
+#width = 17.5, height = 15
+
+fig2ABCDE <- ggarrange(fig2AB, fig2CDE, nrow = 1, ncol = 2, widths = c(0.9, 1), align = "hv")
+#width = 17.5, height = 11
+
+fig2 <- ggarrange(plotlist = list(fig2ABCDE, fig2FG), nrow = 2, ncol = 1, heights = c(1, 0.75), labels = c("", "F"))
+
+pdf(width = 17.5, height = 23, file = fig2_pdf)
+print(fig2)
 dev.off()
 
 sessionInfo()

@@ -1,0 +1,259 @@
+---
+title: "Celltype annotation GSE134809"
+author: "Andrew Y.F. Li Yim"
+date: '2023-04-28'
+output: html_document
+---
+
+The goal of this document is to show how we added several cell-specific annotations, such as the mitochondrial percentage mitochondrial reads, the cellcycle status as well as the celltypes to the data obtained from GSE134809. While we expect that rerunning this notebook should by-and-large yield the same annotations, we cannot guarantee that all cells will be given the same annotations given the stochastic nature of some steps. Accordingly, the result of our own demultiplexing run has been placed in the `config/annotations/gse134809_celltypes.csv` for subsequent integration. 
+
+```{r libraries}
+require(Seurat)
+```
+
+```{r setup, include=FALSE}
+gse134809_seurat_rds <- "resources/gse134809/gse134809.Rds"
+reference_rds <- "resources/scrnaseq/reference_data/pbmc_multimodal.Rds"
+```
+
+```{r import}
+gse134809 <- readRDS(gse134809_seurat_rds)
+```
+
+## Mitochondrial reads
+
+```{r mitochondial reads}
+gse134809[["percent_MT"]] <- PercentageFeatureSet(gse134809, pattern = "^MT-")
+```
+
+## Cellcycle status
+
+```{r cell cycle status}
+cc_genes_present <- list(
+  s_genes = cc.genes.updated.2019$s.genes[which(cc.genes.updated.2019$s.genes %in% rownames(gse134809))],
+  g2m_genes = cc.genes.updated.2019$g2m.genes[which(cc.genes.updated.2019$g2m.genes %in% rownames(gse134809))]
+)
+
+# For some reason when performing CellCycleScoring on SCTransformed data, it fails in some samples. The error is the following:
+# Error in `cut_number()`:
+#   ! Insufficient data values to produce 24 bins.
+# Run `rlang::last_error()` to see where the error occurred.
+# Having had a look on the Github page of Seurat, this seems to occur when no 24 bins can be found. An odd solution is to normalize with NormalizeData instead. 
+# As the eventual goal is to merge the datasets and then renormalize later on again with SCTransform, I will use NormalizeData as a side-step.
+
+if (any(unlist(lapply(cc_genes_present, length)) != 0)) {
+  gse134809 <- CellCycleScoring(
+    object = gse134809,
+    s.features = cc_genes_present$s_genes,
+    g2m.features = cc_genes_present$g2m_genes
+  )
+}
+```
+
+## Celltypes
+
+### Hao et al. 2020
+
+Next, we add the annotations lifted over from the Hao et al. 2020, a scRNAseq experiment on 8 individuals where cells were annotated using CITE-seq.
+
+```{r reference PBMC}
+reference_seuratObject <- readRDS(reference_rds)
+
+ref_anchors <- FindTransferAnchors(
+  reference = reference_seuratObject,
+  query = gse134809,
+  normalization.method = "SCT",
+  reference.reduction = "pca",
+  dims = 1:50
+)
+
+predictions <- TransferData(anchorset = ref_anchors, 
+                            reference = reference_seuratObject,
+                            refdata = list(
+                              celltype_l1 = "celltype.l1",
+                              celltype_l2 = "celltype.l2",
+                              celltype_l3 = "celltype.l3",
+                              celltype_l4 = "celltype.l4")
+)
+
+gse134809@meta.data <- gse134809@meta.data %>%
+  dplyr::mutate(celltype_l1 = predictions$celltype_l1$predicted.id,
+                celltype_l1_score = predictions$celltype_l1$prediction.score.max, 
+                celltype_l2 = predictions$celltype_l2$predicted.id, 
+                celltype_l2_score = predictions$celltype_l2$prediction.score.max, 
+                celltype_l3 = predictions$celltype_l3$predicted.id, 
+                celltype_l3_score = predictions$celltype_l3$prediction.score.max,
+                celltype_l4 = predictions$celltype_l4$predicted.id, 
+                celltype_l4_score = predictions$celltype_l4$prediction.score.max)
+rownames(gse134809@meta.data) <- colnames(gse134809)
+
+cell_metadata <- gse134809@meta.data
+```
+
+### Manual annotations
+
+We previously annotated most of the celltypes, providing somewhat superficial annotations. The automatic annotations are in our opinion good at providing more granular annotations for NK/ILC, B, and T cells. However, for non-immune cells, which are not typically present in PBMCs, the model will almost certainly fail. I will therefore adopt the T, B, NK/ILC annotations.
+
+```{r normalize}
+gse134809 <- DietSeurat(gse134809, 
+                        counts = TRUE, 
+                        data = TRUE, 
+                        scale.data = FALSE)
+
+gse134809 <- SCTransform(gse134809, verbose = FALSE, conserve.memory = TRUE)
+```
+
+```{r dimension finding}
+gse134809 <- RunPCA(object = gse134809, npcs = 100, seed.use = 79804123)
+ElbowPlot(gse134809, ndims = 100)
+```
+
+```{r clustering}
+gse134809 <- FindNeighbors(gse134809, reduction = "pca", dims = 1:31)
+gse134809 <- FindClusters(gse134809, resolution = 0.5, verbose = FALSE)
+gse134809 <- RunUMAP(gse134809, dims = 1:31, seed.use = 512352)
+```
+
+Having clustered everything together, the next step is to investigate each. Generally, the major lineages are reasonably good.
+
+```{r seurat clusters, fig.width = 10, fig.height = 10}
+DimPlot(gse134809, group.by = "seurat_clusters", label = T)
+```
+
+```{r previous annotations, fig.width = 10, fig.height = 10}
+DimPlot(gse134809, group.by = "Celltype", label = T) + theme(legend.pos = "bottom")
+```
+
+```{r seurat clusters, fig.width = 10, fig.height = 10}
+DimPlot(gse134809, group.by = "celltype_l3", label = T) + theme(legend.pos = "bottom")
+```
+
+
+```{r lineage markers, fig.width = 15, fig.height=15}
+FeaturePlot(gse134809, c("EPCAM", "VWF", "LUM", "PTPRC", "CD3D", "MS4A1", "CD14", "FCGR3A", "NKG7", "PPBP", "CD34", "CLEC10A", "CD1C", "CD163"), raster = T)
+```
+
+### Curation
+
+```{r summarize}
+manual_metadata <- gse134809@meta.data %>%
+  dplyr::mutate(manual_l4 = Celltype,
+                manual_l4 = ifelse(manual_l4 == "Dying/Dead cells", "Dead/debris", manual_l4),
+                manual_l4 = ifelse(manual_l4 %in% c("CD4T", "CD8T", "DC", "B", "NK"), celltype_l3, manual_l4),
+                manual_l4 = ifelse(manual_l4 %in% c("Plasma cell"), "Plasma", manual_l4),
+                manual_l4 = ifelse(seurat_clusters %in% c("10", "11", "16", "18", "21", "22", "24", "31"), "Plasma IgA+", manual_l4),
+                manual_l4 = ifelse(seurat_clusters %in% c("37", "35", "20", "39"), "Plasma IgM+", manual_l4),
+                manual_l4 = ifelse(seurat_clusters %in% c("23", "25", "29", "32"), "Plasma IgG+", manual_l4),
+                manual_l4 = ifelse(manual_l4 %in% c("HSPC", "Erythroblast"), "Epithelial", manual_l4),
+                manual_l4 = ifelse(manual_l4 == "pDC", "PDC", manual_l4),
+                manual_l4 = ifelse(celltype_l3 == "PDC", "PDC", manual_l4),
+                manual_l4 = ifelse(manual_l4 == "Unknown", "Unknown PTPRC+", manual_l4),
+                manual_l3 = manual_l4,
+                manual_l3 = ifelse(manual_l3 %in% c("Plasma IgA+", "Plasma IgM+", "Plasma IgG+"), "Plasma", manual_l3),
+                manual_l3 = ifelse(manual_l3 %in% c("B naive kappa", "B naive lambda"), "B naive", manual_l3),
+                manual_l3 = ifelse(manual_l3 %in% c("B intermediate kappa", "B intermediate lambda"), "B intermediate", manual_l3),
+                manual_l3 = ifelse(manual_l3 %in% c("B memory kappa", "B memory lambda"), "B memory", manual_l3),
+                manual_l3 = ifelse(manual_l3 %in% c("ILC", "ILC2"), "ILC", manual_l3),
+                manual_l3 = ifelse(manual_l3 %in% c("NK CD16-", "NK CD16-CD56+"), "NK CD16-", manual_l3),
+                manual_l2 = manual_l3,
+                manual_l2 = ifelse(manual_l2 %in% c("CD4 CTL", "CD4 naive", "CD4 proliferating", "CD4 TCM", "CD4 TEM", "CD4 Treg"), "CD4T", manual_l2),
+                manual_l2 = ifelse(manual_l2 %in% c("CD8 naive", "CD8 proliferating", "CD8 TCM", "CD8 TEM"), "CD8T", manual_l2),
+                manual_l2 = ifelse(manual_l2 %in% c("MAIT", "DNT", "GDT"), "other T", manual_l2),
+                manual_l2 = ifelse(manual_l2 %in% c("CDC1", "CDC2"), "CDC", manual_l2),
+                manual_l2 = ifelse(manual_l2 %in% c("Classical monocyte", "Non-classical monocyte"), "Monocyte", manual_l2),
+                manual_l1 = manual_l2,
+                manual_l1 = ifelse(manual_l1 %in% c("CD4T", "CD8T", "other T"), "T", manual_l1),
+                manual_l1 = ifelse(manual_l1 %in% c("B naive", "B intermediate", "B memory", "Plasma"), "B", manual_l1),
+                manual_l1 = ifelse(manual_l1 %in% c("Monocyte", "Macrophage", "CDC", "MDC", "Mast"), "Myeloid", manual_l1),
+                manual_l0 = manual_l1,
+                manual_l0 = ifelse(manual_l0 %in% c("B", "ILC", "Myeloid", "NK", "PDC", "T", "Unknown PTPRC+"), "Immune", manual_l0)
+                ) %>%
+  dplyr::mutate(CellID = rownames(.)) %>%
+  dplyr::select(CellID, manual_l0, manual_l1, manual_l2, manual_l3, manual_l4)
+```
+
+```{r gse134809 metadata, fig.width = 10, fig.height = 12}
+gse134809_annotated <- gse134809
+gse134809_annotated@meta.data <- gse134809_annotated@meta.data %>%
+  dplyr::rename(Sample_ID = sampleID) %>%
+  dplyr::mutate(CellID = rownames(.)) %>%
+  dplyr::left_join(manual_metadata, by = "CellID")
+
+rownames(gse134809_annotated@meta.data) <- colnames(gse134809_annotated)
+
+DimPlot(gse134809_annotated, group.by = "manual_l4", label = T, raster = T) +
+  theme(legend.pos = "bottom")
+```
+
+### PDC
+
+```{r pdc subsetting}
+pdc_gse134809 <- gse134809_annotated[,gse134809_annotated@meta.data$manual_l4 == "PDC"]
+```
+
+It appears that for the PDCs (the celltype we are interested in), there are some cells that do not fall in the same cluster
+
+```{r aberrant pdc}
+aberrant_pdc_gse134809_metadata <- pdc_gse134809@meta.data %>% dplyr::filter(manual_l4 == "PDC" & seurat_clusters != "4")
+```
+
+Simply annotating them with what the automatic annotation by Seurat provided already fixes about half
+
+```{r}
+aberrant_pdc_gse134809_metadata_reannotated <- aberrant_pdc_gse134809_metadata %>%
+  dplyr::mutate(manual_l4 = celltype_l3,
+                manual_l4 = ifelse(manual_l4 == "PDC" & seurat_clusters == "1", "B intermediate kappa", manual_l4),
+                manual_l4 = ifelse(manual_l4 == "PDC" & seurat_clusters == "9", "NK CD16-", manual_l4),
+                manual_l4 = ifelse(manual_l4 == "PDC" & seurat_clusters %in% c("10", "11"), "Plasma IgA+", manual_l4),
+                manual_l4 = ifelse(manual_l4 == "PDC" & seurat_clusters %in% c("13"), "Fibroblast", manual_l4),
+                manual_l4 = ifelse(manual_l4 == "PDC" & seurat_clusters %in% c("15"), "ILC", manual_l4),
+                manual_l4 = ifelse(manual_l4 == "PDC" & seurat_clusters %in% c("19"), "CD4 TCM", manual_l4),
+                manual_l4 = ifelse(manual_l4 == "PDC" & seurat_clusters %in% c("26"), "Mast", manual_l4),
+                manual_l3 = manual_l4,
+                manual_l2 = manual_l3,
+                manual_l2 = ifelse(manual_l2 %in% c("Classical monocyte"), "Monocyte", manual_l2),
+                manual_l2 = ifelse(manual_l2 %in% c("CDC2"), "CDC", manual_l2),
+                manual_l2 = ifelse(manual_l2 %in% c("CD4 TCM"), "CD4T", manual_l2),
+                manual_l1 = manual_l2,
+                manual_l1 = ifelse(manual_l1 %in% c("CDC", "Monocyte", "Mast"), "Myeloid", manual_l1),
+                manual_l1 = ifelse(manual_l1 %in% c("CD4T"), "T", manual_l1),
+                manual_l0 = "Immune",
+                manual_l0 = ifelse(manual_l1 %in% c("Fibroblast"), "Fibroblast", manual_l0))
+```
+
+```{r}
+aberrant_pdc_annotations <- aberrant_pdc_gse134809_metadata_reannotated %>%
+  dplyr::select(CellID, manual_l0, manual_l1, manual_l2, manual_l3, manual_l4)
+```
+
+### Reimport the PDC
+
+```{r manual metadata proper}
+manual_metadata_proper <- manual_metadata %>%
+  dplyr::filter(!CellID %in% aberrant_pdc_annotations$CellID) %>%
+  dplyr::rows_append(aberrant_pdc_annotations)
+```
+
+```{r gse134809 metadata proper, fig.width = 10, fig.height = 12}
+gse134809_annotated_proper <- gse134809
+gse134809_annotated_proper@meta.data <- gse134809_annotated_proper@meta.data %>%
+  dplyr::rename(Sample_ID = sampleID) %>%
+  dplyr::mutate(CellID = rownames(.)) %>%
+  dplyr::left_join(manual_metadata_proper, by = "CellID")
+
+rownames(gse134809_annotated_proper@meta.data) <- colnames(gse134809_annotated_proper)
+
+DimPlot(gse134809_annotated_proper, group.by = "manual_l4", label = T, raster = T) +
+  theme(legend.pos = "bottom")
+```
+
+## Save
+
+```{r save data} 
+write.csv(manual_metadata_proper, "output/gse134809/annotated/gse134809_celltype_annotations.csv")
+saveRDS(gse134809_annotated_proper, "output/gse134809/annotated/gse134809_annotated.Rds")
+```
+
+```{r sessionInfo}
+sessionInfo()
+```

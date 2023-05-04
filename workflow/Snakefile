@@ -50,6 +50,8 @@ basedir = config['base_dir']
 # Rules
 include: "rules/pbmc_scrnaseq.smk"
 include: "rules/pbmc_masscytometry.smk"
+include: "rules/pbmc_flowcytometry.smk"
+include: "rules/gse134809_scrnaseq.smk"
 include: "rules/cd14monocyte_brnaseq.smk"
 include: "rules/figures.smk"
 
@@ -69,13 +71,18 @@ rule all:
     #expand("{basedir}/output/scrnaseq/normalized/{run_fbc}_normalized_SeuratObject.Rds", basedir=basedir, run_fbc=run_fbcs),
     #expand("{basedir}/output/scrnaseq/cell_metadata/annotated_SeuratObject.Rds", basedir=basedir),
     #expand("{basedir}/output/scrnaseq/clustered/clustered_SeuratObject.Rds", basedir=basedir),
-    #expand("{basedir}/output/scrnaseq/da/dacs.csv", basedir=basedir),
-    #expand("{basedir}/output/scrnaseq/de/degs.Rds", basedir=basedir),
-    expand("{basedir}/output/scrnaseq/pseudobulk/pbmc_pb_dds.Rds", basedir=basedir),
+    expand("{basedir}/output/scrnaseq/da/dacs.csv", basedir=basedir),
+    expand("{basedir}/output/scrnaseq/de/degs_{level}_list.Rds", basedir=basedir, level = ["manual_l0", "manual_l1", "manual_l2", "manual_l3"]),
+    ## GSE134809
+    #expand("{basedir}/output/gse134809/annotated/gse134809_annotated_SeuratObject.Rds", basedir=basedir),
+    expand("{basedir}/output/gse134809/da/dacs_involvedvuninvolved_immune_l3rl1.csv", basedir=basedir),
     ## Mass cytometry
     expand("{basedir}/output/masscytometry/da/dacs.csv", basedir=basedir),
     #expand("{basedir}/output/masscytometry/cell_metadata/sce_annotated.Rds", basedir=basedir),
-    #expand("{basedir}/output/masscytometry/dimred/sce_dimred.Rds", basedir=basedir),
+    expand("{basedir}/output/masscytometry/dimred/sce_dimred_ss.Rds", basedir=basedir),
+    ## Flow cytometry
+    #expand("{basedir}/output/flowcytometry/celltype_percentages.csv", basedir=basedir),
+    expand("{basedir}/output/flowcytometry/da/dacs.csv", basedir=basedir),
     ## CD14+ monocyte bulk RNAseq
     #expand("resources/brnaseq/fastq/{brnaseq_fastq_fn}.fastq.gz", brnaseq_fastq_fn=brnaseq_fastq_fns),
     #"resources/brnaseq/reference_genome",
@@ -91,16 +98,19 @@ rule all:
     #expand("{basedir}/output/brnaseq", basedir=basedir),
     expand("{basedir}/output/brnaseq/counts/counts_cleaned_se.rds", basedir=basedir),
     ## Figures
-    ### Fig1
-    expand("{basedir}/output/figures/scrnaseq_umap_pbmc.pdf", basedir=basedir),
-    expand("{basedir}/output/figures/scrnaseq_dotplot_markers.pdf", basedir=basedir),
-    expand("{basedir}/output/figures/masscytometry_umap_pbmc.pdf", basedir=basedir),
-    expand("{basedir}/output/figures/masscytometry_heatmap_markers_l3.pdf", basedir=basedir),
-    expand("{basedir}/output/figures/scrnaseq_masscytometry_scatterplot_abundance_l3rl0_colmanuall1.pdf", basedir=basedir),
-    expand("{basedir}/output/figures/scrnaseq_umap_pbmc_ITGA4_ITGB7.pdf", basedir=basedir),
-    expand("{basedir}/output/figures/masscytometry_umap_pbmc_ITGA4_A4B7.pdf", basedir=basedir),
     ### Fig2
-    expand("{basedir}/output/figures/scrnaseq_boxplot_abundance_l3rl0.pdf", basedir=basedir),
-    expand("{basedir}/output/figures/massytometry_boxplot_abundance_l3rl0.pdf", basedir=basedir),
+    # expand("{basedir}/output/figures/scrnaseq_umap_pbmc.pdf", basedir=basedir),
+    # expand("{basedir}/output/figures/scrnaseq_dotplot_markers_l3.pdf", basedir=basedir),
+    # expand("{basedir}/output/figures/masscytometry_umap_pbmc.pdf", basedir=basedir),
+    # expand("{basedir}/output/figures/masscytometry_heatmap_markers_l3.pdf", basedir=basedir),
+    # expand("{basedir}/output/figures/scrnaseq_masscytometry_scatterplot_abundance_l3rl0_colmanuall1.pdf", basedir=basedir),
+    # expand("{basedir}/output/figures/scrnaseq_umap_pbmc_ITGA4_ITGB7.pdf", basedir=basedir),
+    # expand("{basedir}/output/figures/masscytometry_umap_pbmc_ITGA4_A4B7.pdf", basedir=basedir),
+    expand("{basedir}/output/figures/fig2.pdf", basedir=basedir),
     ### Fig3
-    expand("{basedir}/output/figures/scrnaseq_arrowplot_degs.pdf", basedir=basedir),
+    # expand("{basedir}/output/figures/scrnaseq_boxplot_abundance_l3rl0.pdf", basedir=basedir),
+    # expand("{basedir}/output/figures/massytometry_boxplot_abundance_l3rl0.pdf", basedir=basedir),
+    expand("{basedir}/output/figures/fig3.pdf", basedir=basedir),
+    ### Fig4
+    # expand("{basedir}/output/figures/scrnaseq_arrowplot_degs.pdf", basedir=basedir),
+    # expand("{basedir}/output/figures/fig4.pdf", basedir=basedir),
