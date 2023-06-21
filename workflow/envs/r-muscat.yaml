@@ -4,4 +4,6 @@ channels:
   - anaconda
   - defaults
 dependencies:
+  - r-seurat=4.3.0
+  - bioconductor-singlecellexperiment=1.20.0
   - bioconductor-muscat=1.12.0

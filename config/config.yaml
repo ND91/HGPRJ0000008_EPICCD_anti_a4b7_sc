@@ -1,4 +1,4 @@
-base_dir: /home/andrewliyim/lkgres/projects/PRJ0000008_EPICCD/anti_a4b7_sc/src/snakemake
+base_dir: /home/andrewliyim/lkgres/projects/PRJ0000008_EPICCD/anti_a4b7_sc
 sample_metadata: config/samples/sample_metadata.xlsx
 scrnaseq_files: config/samples/files_pbmc_scrnaseq.xlsx
 cellranger_basepath: /home/andrewliyim/shared_home/local/cellranger/cellranger-7.0.0
@@ -6,9 +6,11 @@ scrnaseq_reference_dir: /home/andrewliyim/lkgres/common_data/genome_indexes/cell
 masscytometry_markers: config/features/masscytometry_panel.xlsx
 masscytometry_files: config/samples/files_pbmc_masscytometry.xlsx
 flowcytometry_files: config/samples/files_pbmc_flowcytometry.xlsx
+manual_l1_order: config/order/manual_l1.xlsx
 manual_l3_order: config/order/manual_l3.xlsx
 brnaseq_files: config/samples/files_cd14mono_brnaseq.xlsx
 brnaseq_paired: True
 brnaseq_umi: NNNNNNNNN
 brnaseq_reference_dir: /home/andrewliyim/ltytgat/MI-group/ayliyim/data/genome_indexes/star/homo_sapiens/ensembl_GRCh38_ensembl104_sjdbO149
 brnaseq_gtf_file: /home/andrewliyim/ltytgat/MI-group/ayliyim/data/transcriptome/gencode/gencode.v38.annotation.gtf
+cellphonedb_sources: https://github.com/ventolab/cellphonedb-data/archive/refs/tags/v4.1.0.tar.gz

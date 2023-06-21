@@ -72,10 +72,14 @@ rule all:
     #expand("{basedir}/output/scrnaseq/cell_metadata/annotated_SeuratObject.Rds", basedir=basedir),
     #expand("{basedir}/output/scrnaseq/clustered/clustered_SeuratObject.Rds", basedir=basedir),
     expand("{basedir}/output/scrnaseq/da/dacs.csv", basedir=basedir),
-    expand("{basedir}/output/scrnaseq/de/degs_{level}_list.Rds", basedir=basedir, level = ["manual_l0", "manual_l1", "manual_l2", "manual_l3"]),
+    expand("{basedir}/output/scrnaseq/de/pb_mds.Rds", basedir=basedir),
+    #expand("{basedir}/output/scrnaseq/de/degs_{level}_list.Rds", basedir=basedir, level = ["manual_l0", "manual_l1", "manual_l2", "manual_l3"]),
+    expand("{basedir}/output/scrnaseq/de/fgsea_{level}_list.Rds", basedir=basedir, level = ["manual_l0", "manual_l1", "manual_l2", "manual_l3"]),
+    expand("{basedir}/output/scrnaseq/monocyte/monocyte_SeuratObject.Rds", basedir=basedir),
     ## GSE134809
     #expand("{basedir}/output/gse134809/annotated/gse134809_annotated_SeuratObject.Rds", basedir=basedir),
     expand("{basedir}/output/gse134809/da/dacs_involvedvuninvolved_immune_l3rl1.csv", basedir=basedir),
+    expand("{basedir}/output/gse134809/de/degs_manual_l3_list.Rds", basedir=basedir),
     ## Mass cytometry
     expand("{basedir}/output/masscytometry/da/dacs.csv", basedir=basedir),
     #expand("{basedir}/output/masscytometry/cell_metadata/sce_annotated.Rds", basedir=basedir),
@@ -96,7 +100,8 @@ rule all:
     #"output/brnaseq/counts/counts.txt",
     #"output/brnaseq/multiqc",
     #expand("{basedir}/output/brnaseq", basedir=basedir),
-    expand("{basedir}/output/brnaseq/counts/counts_cleaned_se.rds", basedir=basedir),
+    #expand("{basedir}/output/brnaseq/counts/counts_cleaned_se.rds", basedir=basedir),
+    expand("{basedir}/output/brnaseq/de/degs_rvnr.csv", basedir=basedir),
     ## Figures
     ### Fig2
     # expand("{basedir}/output/figures/scrnaseq_umap_pbmc.pdf", basedir=basedir),
@@ -114,3 +119,6 @@ rule all:
     ### Fig4
     # expand("{basedir}/output/figures/scrnaseq_arrowplot_degs.pdf", basedir=basedir),
     # expand("{basedir}/output/figures/fig4.pdf", basedir=basedir),
+    expand("{basedir}/output/figures/fig4.pdf", basedir=basedir),
+    ### Fig5
+    expand("{basedir}/output/figures/fig5.pdf", basedir=basedir),

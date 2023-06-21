@@ -299,11 +299,11 @@ rule fig3:
   input:
     seurat_rds="{basedir}/output/scrnaseq/clustered/clustered_SeuratObject.Rds",
     scrnaseq_dacs_csv="{basedir}/output/scrnaseq/da/dacs.csv",
-    scrnaseq_degs_list_rds="{basedir}/output/scrnaseq/de/degs_manual_l3_list.Rds",
-    gse134809_seurat_rds="{basedir}/output/gse134809/annotated/gse134809_annotated_SeuratObject.Rds",
-    facs_flowexample_png="{basedir}/resources/flowcytometry/fig3c.png",
-    facs_proportions_csv="{basedir}/output/flowcytometry/celltype_percentages.csv",
-    facs_dacs_csv="{basedir}/output/flowcytometry/da/dacs.csv",
+    sce_rds="{basedir}/output/masscytometry/dimred/sce_dimred_ss.Rds",
+    masscytometry_dacs_csv="{basedir}/output/masscytometry/da/dacs.csv",
+    scrnaseq_degs_l3_rds="{basedir}/output/scrnaseq/de/degs_manual_l3_list.Rds",
+    scrnaseq_fgsea_list_rds="{basedir}/output/scrnaseq/de/fgsea_manual_l3_list.Rds",
+    manual_l1_order_xlsx=config['manual_l1_order'],
     manual_l3_order_xlsx=config['manual_l3_order'],
   output:
     fig3_pdf="{basedir}/output/figures/fig3.pdf",
@@ -319,5 +319,58 @@ rule fig3:
     mem_mb=47000,
   shell:
     """
-    Rscript workflow/scripts/figures/fig3.R "{input.seurat_rds}" "{input.scrnaseq_dacs_csv}" "{input.scrnaseq_degs_list_rds}" "{input.gse134809_seurat_rds}" "{input.facs_flowexample_png}" "{input.facs_proportions_csv}" "{input.facs_dacs_csv}" "{input.manual_l3_order_xlsx}" "{output.fig3_pdf}" &> "{log}"
+    Rscript workflow/scripts/figures/fig3.R "{input.seurat_rds}" "{input.scrnaseq_dacs_csv}" "{input.sce_rds}" "{input.masscytometry_dacs_csv}" "{input.scrnaseq_degs_l3_rds}" "{input.scrnaseq_fgsea_list_rds}" "{input.manual_l1_order_xlsx}" "{input.manual_l3_order_xlsx}" "{output.fig3_pdf}" &> "{log}"
+    """
+
+rule fig4:
+  input:
+    seurat_rds="{basedir}/output/scrnaseq/clustered/clustered_SeuratObject.Rds",
+    scrnaseq_dacs_csv="{basedir}/output/scrnaseq/da/dacs.csv",
+    scrnaseq_degs_list_rds="{basedir}/output/scrnaseq/de/degs_manual_l3_list.Rds",
+    gse134809_seurat_rds="{basedir}/output/gse134809/annotated/gse134809_annotated_SeuratObject.Rds",
+    facs_proportions_csv="{basedir}/output/flowcytometry/celltype_percentages.csv",
+    facs_dacs_csv="{basedir}/output/flowcytometry/da/dacs.csv",
+    manual_l3_order_xlsx=config['manual_l3_order'],
+  output:
+    fig4_pdf="{basedir}/output/figures/fig4.pdf",
+  threads:
+    1
+  conda:
+    "../envs/r-seurat.yaml"
+  log:
+    "{basedir}/output/figures/fig4.log",
+  benchmark:
+    "{basedir}/output/figures/fig4_benchmark.txt",
+  resources:
+    mem_mb=47000,
+  shell:
+    """
+    Rscript workflow/scripts/figures/fig4.R "{input.seurat_rds}" "{input.scrnaseq_dacs_csv}" "{input.scrnaseq_degs_list_rds}" "{input.gse134809_seurat_rds}" "{input.facs_proportions_csv}" "{input.facs_dacs_csv}" "{input.manual_l3_order_xlsx}" "{output.fig4_pdf}" &> "{log}"
+    """
+
+rule fig5:
+  input:
+    seurat_rds="{basedir}/output/scrnaseq/clustered/clustered_SeuratObject.Rds",
+    monocyte_seurat_rds="{basedir}/output/scrnaseq/monocyte/monocyte_SeuratObject.Rds",
+    scrnaseq_degs_l3_rds="{basedir}/output/scrnaseq/de/degs_manual_l3_list.Rds",
+    fgsea_list_rds="{basedir}/output/scrnaseq/de/fgsea_manual_l3_list.Rds",
+    brnaseq_degs_csv="{basedir}/output/brnaseq/de/degs_rvnr.csv",
+    brnaseq_rld_rds="{basedir}/output/brnaseq/de/rld.rds",
+    ccrl_mono_xlsx="{basedir}/resources/receptor_ligand_classical_monocytes.xlsx",
+    manual_l3_order_xlsx=config['manual_l3_order'],
+  output:
+    fig5_pdf="{basedir}/output/figures/fig5.pdf",
+  threads:
+    1
+  conda:
+    "../envs/r-seurat.yaml"
+  log:
+    "{basedir}/output/figures/fig5.log",
+  benchmark:
+    "{basedir}/output/figures/fig5_benchmark.txt",
+  resources:
+    mem_mb=47000,
+  shell:
+    """
+    Rscript workflow/scripts/figures/fig5.R "{input.seurat_rds}" "{input.monocyte_seurat_rds}" "{input.scrnaseq_degs_l3_rds}" "{input.fgsea_list_rds}" "{input.brnaseq_degs_csv}" "{input.brnaseq_rld_rds}" "{input.ccrl_mono_xlsx}" "{input.manual_l3_order_xlsx}" "{output.fig5_pdf}" &> "{log}"
     """

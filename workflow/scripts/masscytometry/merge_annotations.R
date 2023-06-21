@@ -54,14 +54,13 @@ event_metadata_annotated <- masscytometry %>%
       manual_l3 %in% c("Classical monocyte", "Intermediate monocyte", "Non-classical monocyte") ~ "Monocyte",
       manual_l3 %in% c("CD4 CTL", "CD4 naive", "CD4 proliferating", "CD4 TCM", "CD4 TEM", "CD4 Treg") ~ "CD4T",
       manual_l3 %in% c("CD8 CTL", "CD8 naive", "CD8 proliferating", "CD8 TCM", "CD8 TEM") ~ "CD8T",
-      manual_l3 %in% c("CDC2") ~ "CDC",
+      manual_l3 %in% c("CDC2", "CDC") ~ "DC",
       manual_l3 %in% c("DNT") ~ "other T",
       manual_l3 %in% c("NK CD16-", "NK CD16+") ~ "NK",
       TRUE ~ manual_l3),
     manual_l1 = case_when(
-      manual_l2 %in% c("CDC", "Platelet") ~ "Myeloid",
+      manual_l2 %in% c("DC", "Platelet", "Monocyte") ~ "Myeloid",
       manual_l2 %in% c("B memory", "B naive") ~ "B",
-      manual_l2 %in% c("Monocyte", "CDC") ~ "Myeloid",
       manual_l2 %in% c("CD4T", "CD8T", "other T") ~ "T",
       manual_l2 %in% c("Multiplet") ~ "Multiplet",
       TRUE ~ manual_l2)) %>%

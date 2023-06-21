@@ -290,6 +290,29 @@ rule monocyte_subsetting:
     Rscript workflow/scripts/scrnaseq/monocyte_subsetting.R "{input.seurat_annotated_rds}" "{output.seurat_monocyte_rds}" "{output.umap_csv}" &> "{log}"
     """
 
+rule scrnaseq_muscat_mds:
+  input:
+    seurat_annotated_rds="{basedir}/output/scrnaseq/clustered/clustered_SeuratObject.Rds",
+  output:
+    pb_sce_rds="{basedir}/output/scrnaseq/de/pb_sce.Rds",
+    pb_mds_rds="{basedir}/output/scrnaseq/de/pb_mds.Rds",
+  threads: 
+    1
+  conda:
+    "../envs/r-muscat.yaml",
+  log:
+    "{basedir}/output/scrnaseq/de/scrnaseq_muscat_mds.log",
+  message:
+    "--- scRNAseq: Perform muscat pseudobulk MDS analysis ---",
+  benchmark:
+    "{basedir}/output/scrnaseq/de/scrnaseq_muscat_mds_benchmark.txt",
+  resources:
+    mem_mb=47000,
+  shell:
+    """
+    Rscript workflow/scripts/scrnaseq/pbmc_muscat_mds.R "{input.seurat_annotated_rds}" "{output.pb_sce_rds}" "{output.pb_mds_rds}" &> "{log}"
+    """
+
 # Analyses
 
 rule scrnaseq_differential_abundance:
@@ -317,6 +340,7 @@ rule scrnaseq_differential_abundance:
 rule scrnaseq_differential_expression:
   input:
     seurat_annotated_rds="{basedir}/output/scrnaseq/clustered/clustered_SeuratObject.Rds",
+    functions_r="{basedir}/workflow/scripts/functions.R",
   output:
     degs_list_rds="{basedir}/output/scrnaseq/de/degs_{level}_list.Rds",
   threads: 
@@ -335,5 +359,27 @@ rule scrnaseq_differential_expression:
     level="{level}",
   shell:
     """
-    Rscript workflow/scripts/scrnaseq/pbmc_pseudobulk_differential_expression.R "{input.seurat_annotated_rds}" "{params.level}" "{output.degs_list_rds}" &> "{log}"
+    Rscript workflow/scripts/scrnaseq/pbmc_pseudobulk_differential_expression.R "{input.seurat_annotated_rds}" "{params.level}" "{input.functions_r}" "{output.degs_list_rds}" &> "{log}"
+    """
+
+rule scrnaseq_gsea:
+  input:
+    degs_list_rds="{basedir}/output/scrnaseq/de/degs_{level}_list.Rds",
+  output:
+    fgsea_list_rds="{basedir}/output/scrnaseq/de/fgsea_{level}_list.Rds",
+  threads: 
+    1
+  conda:
+    "../envs/r-deseq2.yaml",
+  log:
+    "{basedir}/output/scrnaseq/de/scrnaseq_gsea_{level}.log",
+  message:
+    "--- scRNAseq: Differential expression fgsea analyses per celltype ---",
+  benchmark:
+    "{basedir}/output/scrnaseq/de/scrnaseq_gsea_{level}_benchmark.txt",
+  resources:
+    mem_mb=47000,
+  shell:
+    """
+    Rscript workflow/scripts/scrnaseq/pbmc_pseudobulk_gsea.R "{input.degs_list_rds}" "{output.fgsea_list_rds}" &> "{log}"
     """

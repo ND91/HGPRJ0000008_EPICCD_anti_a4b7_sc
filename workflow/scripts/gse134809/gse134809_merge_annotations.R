@@ -30,9 +30,9 @@ seuratObject <- seuratObject[,rownames(seuratObject_metadata)]
 seuratObject@meta.data <- seuratObject_metadata
 
 seuratObject <- DietSeurat(seuratObject, 
-                        counts = TRUE, 
-                        data = TRUE, 
-                        scale.data = FALSE)
+                           counts = TRUE, 
+                           data = TRUE, 
+                           scale.data = FALSE)
 
 seuratObject <- SCTransform(seuratObject, verbose = FALSE, conserve.memory = TRUE)
 

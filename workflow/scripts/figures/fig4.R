@@ -14,22 +14,20 @@ library(SingleCellExperiment)
 library(viridis)
 library(scales)
 library(DESeq2)
-library(png)
 
 args <- commandArgs(trailingOnly = TRUE)
-if (length(args) != 9) {
-  stop(paste0("Script needs 9 arguments. Current input is:", args))
+if (length(args) != 8) {
+  stop(paste0("Script needs 8 arguments. Current input is:", args))
 }
 
 seurat_rds <- args[1]
 scrnaseq_dacs_csv <- args[2]
 scrnaseq_degs_l3_rds <- args[3]
 gse134809_seurat_rds <- args[4]
-facs_flowexample_png <- args[5]
-facs_proportions_csv <- args[6]
-facs_dacs_csv <- args[7]
-manual_l3_order_xlsx <- args[8]
-fig3_pdf <- args[9]
+facs_proportions_csv <- args[5]
+facs_dacs_csv <- args[6]
+manual_l3_order_xlsx <- args[7]
+fig4_pdf <- args[8]
 
 scrnaseq_seuratObject <- readRDS(seurat_rds)
 scrnaseq_dacs <- read.csv(scrnaseq_dacs_csv)
@@ -42,15 +40,15 @@ manual_l3_order <- readxl::read_excel(manual_l3_order_xlsx, col_names = T)  %>%
                 celltype_number = paste0(number, ". ", Celltype),
                 celltype_number = factor(celltype_number, levels = celltype_number))
 
-manual_l3_colors <- manual_l3_order$Color
-names(manual_l3_colors) <- manual_l3_order$celltype_number
+manual_l3_number_colors <- manual_l3_order$Color
+names(manual_l3_number_colors) <- manual_l3_order$celltype_number
 
 response_colors <- c(`Responder` = "#009E73",
                      `Non-responder` = "#D55E00")
 
-# Fig3A
+# fig4B
 
-fig3A <- scrnaseq_seuratObject@meta.data %>%
+PDC_perc_PBMC <- scrnaseq_seuratObject@meta.data %>%
   dplyr::mutate(manual_l3 = as.factor(manual_l3)) %>%
   dplyr::group_by(SampleID, Response, manual_l3, .drop = F) %>%
   dplyr::summarize(Nl3sample = n()) %>%
@@ -58,100 +56,46 @@ fig3A <- scrnaseq_seuratObject@meta.data %>%
   dplyr::group_by(SampleID, Response) %>%
   dplyr::mutate(Ncells = sum(Nl3sample),
                 Ncellprop = Nl3sample/Ncells,
-                Ncellprop = ifelse(is.na(Ncellprop), 0, Ncellprop)) %>%
-  ggplot(aes(x = forcats::fct_reorder(manual_l3, -Ncellprop), y = Ncellprop*100, col = Response)) +
-  geom_boxplot(alpha = 0.5, outlier.shape = NA) +
-  geom_point(position = position_dodge(width=0.75), alpha = 0.5) +
-  labs(title = "Percentage relative to PBMCs",
-       y = "%PBMCs") +
-  scale_color_manual(values = response_colors) +
-  theme_bw() +
-  theme(panel.grid.major = element_blank(), 
-        panel.grid.minor = element_blank(),
-        axis.title.x = element_blank(),
-        legend.pos = "bottom",
-        axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
-
-# Fig3B
-
-# fig3B_left <- scrnaseq_seuratObject@meta.data %>%
-#   dplyr::mutate(manual_l3 = as.factor(manual_l3)) %>%
-#   dplyr::group_by(SampleID, Response, manual_l3, .drop = F) %>%
-#   dplyr::summarize(Nl3sample = n()) %>%
-#   dplyr::ungroup() %>%
-#   dplyr::group_by(SampleID, Response) %>%
-#   dplyr::mutate(Ncells = sum(Nl3sample),
-#                 Ncellprop = Nl3sample/Ncells,
-#                 Ncellprop = ifelse(is.na(Ncellprop), 0, Ncellprop)) %>%
-#   dplyr::filter(manual_l3 == "MAIT") %>%
-#   ggplot(aes(x = Response, y = Ncellprop, col = Response)) +
-#   geom_boxplot(alpha = 0.5, outlier.shape = NA, show.legend = F) +
-#   geom_jitter(alpha = 0.5, show.legend = F) +
-#   labs(title = "MAIT",
-#        subtitle = paste0("p-value = ", round(scrnaseq_dacs$P.Value[scrnaseq_dacs$BaselineProp.clusters == "MAIT"], 3)),
-#        y = "Proportion") +
-#   scale_color_manual(values = response_colors) +
-#   theme_bw() +
-#   theme(panel.grid.major = element_blank(), 
-#         panel.grid.minor = element_blank(),
-#         axis.title.x = element_blank(),
-#         legend.pos = "bottom",
-#         axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
-
-fig3B_right <- scrnaseq_seuratObject@meta.data %>%
-  dplyr::mutate(manual_l3 = as.factor(manual_l3)) %>%
-  dplyr::group_by(SampleID, Response, manual_l3, .drop = F) %>%
-  dplyr::summarize(Nl3sample = n()) %>%
-  dplyr::ungroup() %>%
-  dplyr::group_by(SampleID, Response) %>%
-  dplyr::mutate(Ncells = sum(Nl3sample),
-                Ncellprop = Nl3sample/Ncells,
-                Ncellprop = ifelse(is.na(Ncellprop), 0, Ncellprop)) %>%
+                Ncellprop = ifelse(is.na(Ncellprop), 0, Ncellprop),
+                Ncellperc = Ncellprop*100,
+                Modality = "scRNAseq") %>%
   dplyr::filter(manual_l3 == "PDC") %>%
-  ggplot(aes(x = Response, y = Ncellprop*100, col = Response)) +
+  dplyr::left_join(scrnaseq_dacs, by = c("manual_l3" = "BaselineProp.clusters")) %>%
+  dplyr::select(-c(X, Nl3sample, Ncellprop, Ncells, BaselineProp.Freq, PropMean.Non.responder, PropMean.Responder, PropRatio, Tstatistic, FDR)) %>%
+  dplyr::rename(Celltype = manual_l3) %>%
+  dplyr::ungroup() %>%
+  dplyr::add_row(
+    facs_proportions %>%
+      dplyr::left_join(facs_dacs, by = "Celltype") %>%
+      dplyr::filter(Celltype %in% c("PDC")) %>%
+      dplyr::select(-c(X.x, Run_ID, X.y)) %>%
+      dplyr::rename(SampleID = Sample_ID,
+                    Ncellperc = Percentage_relative_PBMCs,
+                    P.Value = pvalue_wilcox) %>%
+      dplyr::mutate(Modality = "FACS") %>%
+      dplyr::select(SampleID, Response, Celltype, Ncellperc, Modality, P.Value)
+  ) %>%
+  dplyr::mutate(label = factor(paste0(Modality, "\np-value = ", round(P.Value, 3)), levels = unique(paste0(Modality, "\np-value = ", round(P.Value, 3)))))
+  
+fig4B <- PDC_perc_PBMC %>%
+  ggplot(aes(x = Response, y = Ncellperc, col = Response)) +
   geom_boxplot(alpha = 0.5, outlier.shape = NA, show.legend = F) +
   geom_jitter(alpha = 0.5, show.legend = F) +
-  labs(title = "PDCs",
-       subtitle = paste0("p-value = ", round(scrnaseq_dacs$P.Value[scrnaseq_dacs$BaselineProp.clusters == "PDC"], 3)),
+  labs(title = "PDC",
        y = "%PBMCs") +
   scale_color_manual(values = response_colors) +
+  facet_wrap(~label, nrow = 2, scales = "free_y") +
   theme_bw() +
   theme(panel.grid.major = element_blank(), 
         panel.grid.minor = element_blank(),
         axis.title.x = element_blank(),
         legend.pos = "bottom",
-        axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+        axis.text.x = element_blank(),
+        axis.ticks.x = element_blank())
 
-# Fig3C
+# fig4C
 
-facs_example <- readPNG(facs_flowexample_png)
-
-fig3C <- ggplot() + 
-  background_image(facs_example) +
-  theme(plot.margin = margin(t=0.5, l=0.5, r=0.5, b=0.5, unit = "cm"))
-
-# Fig3D
-
-fig3D <- facs_proportions %>%
-  dplyr::left_join(facs_dacs, by = "Celltype") %>%
-  dplyr::filter(Celltype %in% c("PDC")) %>%
-  dplyr::mutate(label = paste0(Celltype, "\np-value = ", round(pvalue_wilcox, 2))) %>%
-  ggplot(aes(x = Response, y = Percentage_relative_PBMCs, col = Response)) +
-  geom_boxplot(alpha = 0.5, outlier.shape = NA) +
-  geom_point(position = position_dodge(width=0.75), alpha = 0.5) +
-  scale_color_manual(values = response_colors) +
-  labs(y = "%PBMCs") +
-  facet_wrap(~label, ncol = 1, nrow = 2, scales = "free_y") +
-  theme_bw() +
-  theme(panel.grid.major = element_blank(), 
-        panel.grid.minor = element_blank(),
-        axis.title.x = element_blank(),
-        legend.pos = "bottom",
-        axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
-
-# Fig3E
-
-fig3E <- scrnaseq_degs_l3$PDC$degs %>%
+fig4C <- scrnaseq_degs_l3$PDC$degs %>%
   data.frame() %>%
   dplyr::mutate(Significance = ifelse(padj<0.05, "Significant", "NS"),
                 label = ifelse(gene %in% c("ITGA4", "ITGB7"), gene, NA)) %>%
@@ -173,11 +117,11 @@ fig3E <- scrnaseq_degs_l3$PDC$degs %>%
         panel.grid.minor = element_blank(),
         legend.pos = "bottom")
 
-# Fig3F 
+# fig4ED
 
 scrnaseq_degs_l3_PDC_rld <- rlog(scrnaseq_degs_l3$PDC$dds)
 
-fig3F <- data.frame(SampleID = colData(scrnaseq_degs_l3_PDC_rld)$SampleID,
+fig4D <- data.frame(SampleID = colData(scrnaseq_degs_l3_PDC_rld)$SampleID,
                     Response = colData(scrnaseq_degs_l3_PDC_rld)$Response,
                     t(assay(scrnaseq_degs_l3_PDC_rld)[c("ITGA4", "ITGB7"),])) %>%
   tidyr::pivot_longer(-c(SampleID, Response), names_to = "Gene", values_to = "Expression") %>%
@@ -196,10 +140,11 @@ fig3F <- data.frame(SampleID = colData(scrnaseq_degs_l3_PDC_rld)$SampleID,
   theme(axis.title.x = element_blank(),
         panel.grid.major = element_blank(), 
         panel.grid.minor = element_blank(),
-        axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1),
-        legend.pos = "bottom")
+        axis.text.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        legend.pos = "none")
 
-# Fig3G
+# fig4E
 
 gse134809_pdc_expr_df <- data.frame(CB = colnames(gse134809_seuratObject),
                                     Embeddings(gse134809_seuratObject[["umap"]]),
@@ -208,8 +153,8 @@ gse134809_pdc_expr_df <- data.frame(CB = colnames(gse134809_seuratObject),
                                     gse134809_seuratObject@meta.data) %>%
   dplyr::bind_rows(data.frame(CB = colnames(gse134809_seuratObject),
                               Embeddings(gse134809_seuratObject[["umap"]]),
-                              expr = GetAssayData(gse134809_seuratObject)["ITGAM",],
-                              gene = "ITGAM",
+                              expr = GetAssayData(gse134809_seuratObject)["ITGAX",],
+                              gene = "ITGAX",
                               gse134809_seuratObject@meta.data)) %>%
   dplyr::bind_rows(data.frame(CB = colnames(gse134809_seuratObject),
                               Embeddings(gse134809_seuratObject[["umap"]]),
@@ -234,15 +179,15 @@ gse134809_pdc_expr_df <- data.frame(CB = colnames(gse134809_seuratObject),
   #dplyr::left_join(manual_l3_order, by = c("manual_l3" = "Celltype")) %>%
   dplyr::mutate(#manual_l3 = factor(manual_l3, levels = manual_l3_order$Celltype),
                 expr_rank = rank(expr, ties.method="first"),
-                gene = factor(gene, levels = c("PTPRC", "EPCAM", "HLA-DRA", "ITGAM", "IL3RA", "CLEC4C")))
+                gene = factor(gene, levels = c("PTPRC", "EPCAM", "HLA-DRA", "ITGAX", "IL3RA", "CLEC4C")))
 
-fig3G_left <- ggplot(gse134809_pdc_expr_df, aes(x = UMAP_1, y = UMAP_2, order = expr_rank)) +
-  geom_point_rast(show.legend = F, size = 0.5, col = "#d3d3d3") +
+fig4E_left <- ggplot(gse134809_pdc_expr_df, aes(x = UMAP_1, y = UMAP_2, order = expr_rank)) +
+  geom_point_rast(show.legend = F, size = 0.25, col = "#d3d3d3") +
   geom_point_rast(data = gse134809_pdc_expr_df %>%
-                    dplyr::filter(expr>0), aes(col = expr), show.legend = T, size = 0.5) +
+                    dplyr::filter(expr>1), aes(col = expr), show.legend = T, size = 0.25) +
   labs(y = "",
        x = "",
-       title = "Ileal biopsy PDCs",
+       title = "Ileal biopsies",
        subtitle = "Source: Martin et al. 2019 (GSE134809)") +
   guides(colour = guide_legend(override.aes = list(size = 3),
                                title = "Expression")) +
@@ -259,7 +204,7 @@ fig3G_left <- ggplot(gse134809_pdc_expr_df, aes(x = UMAP_1, y = UMAP_2, order = 
         axis.ticks.y = element_blank(),
         strip.text.x = element_text(face = "bold"))
 
-fig3G_right <- data.frame(CB = colnames(gse134809_seuratObject),
+fig4E_right <- data.frame(CB = colnames(gse134809_seuratObject),
                           Embeddings(gse134809_seuratObject[["umap"]]),
                           gse134809_seuratObject@meta.data) %>%
   dplyr::mutate(label = ifelse(manual_l3 == "PDC", "PDC", NA)) %>%
@@ -268,11 +213,10 @@ fig3G_right <- data.frame(CB = colnames(gse134809_seuratObject),
   geom_point_rast(data = . %>%
                     dplyr::filter(manual_l3 == "PDC"),
                   show.legend = T, size = 0.25, col = "#B15928") +
-  # geom_mark_hull(data =
   labs(y = "",
        x = "",
        title = "",
-       subtitle = "") +
+       subtitle = "PDCs") +
   guides(colour = guide_legend(override.aes = list(size = 3))) +
   theme_minimal() +
   theme(panel.grid.major = element_blank(), 
@@ -286,7 +230,7 @@ fig3G_right <- data.frame(CB = colnames(gse134809_seuratObject),
         axis.ticks.y = element_blank(),
         strip.text.x = element_text(face = "bold"))
 
-# Fig3H
+# fig4F
 
 gse134809_pdcrimmune_proportions <- gse134809_seuratObject@meta.data %>%
   dplyr::filter(manual_l0 %in% c("Immune")) %>%
@@ -300,11 +244,11 @@ gse134809_pdcrimmune_proportions <- gse134809_seuratObject@meta.data %>%
                 Ncellprop = ifelse(is.na(Ncellprop), 0, Ncellprop)) %>%
   dplyr::filter(manual_l3 == "PDC") 
 
-fig3H <- gse134809_pdcrimmune_proportions %>%
+fig4F <- gse134809_pdcrimmune_proportions %>%
   ggplot(aes(x = Phenotype, y = Ncellprop*100, col = Phenotype)) +
   geom_boxplot(alpha = 0.5, outlier.shape = NA, show.legend = F) +
-  geom_jitter(alpha = 0.5, show.legend = F) +
-  labs(title = "Ileal PDC from GSE134809",
+  geom_jitter(alpha = 0.5, show.legend = F, height = 0) +
+  labs(title = "Ileal PDC abundance",
        subtitle = paste0("p-value = ", round(wilcox.test(gse134809_pdcrimmune_proportions$Ncellprop ~ gse134809_pdcrimmune_proportions$Phenotype, paired = T)$p.value, 3)),
        y = "%Immune cells") +
   scale_color_manual(values = c(`Involved` = "#CC79A7", `Uninvolved` = "#E69F00")) +
@@ -317,21 +261,14 @@ fig3H <- gse134809_pdcrimmune_proportions %>%
 
 # Compiled
 
-fig3AB <- ggarrange(fig3A, fig3B_right, nrow = 1, ncol = 2, labels = c("A", ""), common.legend = T, legend = "bottom", align = "hv", widths = c(4, 0.5))
-#width = 18, height = 8.1
-#fig3CD <- ggarrange(fig3C, fig3D, nrow = 1, ncol = 2, labels = c("C", "D"), align = "hv", widths = c(1, 0.25))
-#fig3DEF <- ggarrange(fig3D, fig3E, fig3F, nrow = 1, ncol = 3, labels = c("D", "E", "F"), align = "hv", widths = c(0.5, 1, 0.5))
-fig3CDEF <- ggarrange(ggplot(), fig3D, fig3E, fig3F, nrow = 1, ncol = 4, labels = c("B", "C", "D", "E"), align = "hv", widths = c(1, 0.25, 0.5, 0.25))
-#fig3EFGH <- ggarrange(fig3E, fig3F, fig3G_left, fig3G_right, fig3H, nrow = 1, ncol = 5, labels = c("E", "F", "G", "", "H"), align = "hv", widths = c(1, 0.5, 1.5, 1, 0.5))
-fig3GH <- ggarrange(fig3G_left, fig3G_right, fig3H, nrow = 1, ncol = 3, labels = c("F", "", "G"), align = "hv", widths = c(1.5, 1, 0.5))
+fig4ABCDE <- ggarrange(ggplot(), fig4B, fig4C, fig4D, nrow = 1, ncol = 4, labels = c("A", "B", "C", "D"), align = "hv", widths = c(1, 0.25, 0.5, 0.25))
+fig4FG <- ggarrange(fig4E_left, fig4E_right, fig4F, nrow = 1, ncol = 3, labels = c("E", "", "F"), align = "hv", widths = c(1.5, 1, 0.5))
 #width = 18, height = 5
 
-#fig3 <- ggarrange(plotlist = list(fig3AB, fig3C, fig3DEF, fig3GH), nrow = 4, ncol = 1, heights = c(1, 0.75, 0.75, 0.75))
-#fig3 <- ggarrange(plotlist = list(fig3AB, fig3CD, fig3EFGH), nrow = 3, ncol = 1, heights = c(1, 1, 1))
-fig3 <- ggarrange(plotlist = list(fig3AB, fig3CDEF, fig3GH), nrow = 3, ncol = 1, heights = c(1, 1, 1))
+fig4 <- ggarrange(plotlist = list(fig4ABCDE, fig4FG), nrow = 2, ncol = 1, heights = c(1, 1))
 
-pdf(width = 16.5, height = 15, file = fig3_pdf)
-print(fig3)
+pdf(width = 17, height = 11.5, file = fig4_pdf)
+print(fig4)
 dev.off()
 
 sessionInfo()

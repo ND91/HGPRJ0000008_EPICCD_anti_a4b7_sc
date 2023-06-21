@@ -25,7 +25,7 @@ rule gse134809_integrate_annotations:
   input:
     seurat_rds="{basedir}/resources/gse134809/gse134809.Rds",
     seurat_annotated_csv="{basedir}/resources/gse134809/gse134809_celltypes.csv",
-    sample_metadata_csv="{basedir}/resources/gse134809/1-s2.0-S0092867419308967-mmc2.xlsx"
+    sample_metadata_xlsx="{basedir}/resources/gse134809/1-s2.0-S0092867419308967-mmc2.xlsx"
   output:
     seurat_annotated_rds="{basedir}/output/gse134809/annotated/gse134809_annotated_SeuratObject.Rds",
   threads: 
@@ -42,7 +42,7 @@ rule gse134809_integrate_annotations:
     mem_mb=47000,
   shell:
     """
-    Rscript workflow/scripts/gse134809/gse134809_merge_annotations.R "{input.seurat_rds}" "{input.seurat_annotated_csv}" "{input.sample_metadata_csv}" "{output.seurat_annotated_rds}" &> "{log}"
+    Rscript workflow/scripts/gse134809/gse134809_merge_annotations.R "{input.seurat_rds}" "{input.seurat_annotated_csv}" "{input.sample_metadata_xlsx}" "{output.seurat_annotated_rds}" &> "{log}"
     """
 
 # Analyses
@@ -69,3 +69,27 @@ rule gse134809_differential_abundance:
     """
     Rscript workflow/scripts/gse134809/gse134809_differential_abundance.R "{input.seurat_annotated_rds}" "{output.dacs_involvedvuninvolved_l1rl0_csv}" "{output.dacs_involvedvuninvolved_immune_l3rl1_csv}" &> "{log}"
     """
+    
+rule gse134809_differential_expression:
+  input:
+    seurat_annotated_rds="{basedir}/output/gse134809/annotated/gse134809_annotated_SeuratObject.Rds",
+    functions_r="{basedir}/workflow/scripts/functions.R",
+  output:
+    degs_list_rds="{basedir}/output/gse134809/de/degs_manual_l3_list.Rds",
+  threads: 
+    1
+  conda:
+    "../envs/r-deseq2.yaml",
+  log:
+    "{basedir}/output/gse134809/de/gse134809_differential_expression.log",
+  message:
+    "--- GSE134809: Differential expression analyses at l3 level ---",
+  benchmark:
+    "{basedir}/output/gse134809/de/gse134809_differential_expression_benchmark.txt",
+  resources:
+    mem_mb=47000,
+  shell:
+    """
+    Rscript workflow/scripts/gse134809/gse134809_pseudobulk_differential_expression.R "{input.seurat_annotated_rds}" "{input.functions_r}" "{output.degs_list_rds}" &> "{log}"
+    """
+

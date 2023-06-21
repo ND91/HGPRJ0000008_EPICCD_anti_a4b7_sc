@@ -32,8 +32,11 @@ manual_l3_order <- readxl::read_excel(manual_l3_order_xlsx, col_names = T)  %>%
                 celltype_number = paste0(number, ". ", Celltype),
                 celltype_number = factor(celltype_number, levels = celltype_number))
 
+manual_l3_number_colors <- manual_l3_order$Color
+names(manual_l3_number_colors) <- manual_l3_order$celltype_number
+
 manual_l3_colors <- manual_l3_order$Color
-names(manual_l3_colors) <- manual_l3_order$celltype_number
+names(manual_l3_colors) <- manual_l3_order$Celltype
 
 scrnaseq_umap_df <- data.frame(CB = colnames(scrnaseq_seuratObject),
                                Embeddings(scrnaseq_seuratObject[["umap"]]),
@@ -68,8 +71,8 @@ fig2A <- ggplot(scrnaseq_umap_df, aes(x = UMAP_1, y = UMAP_2, col = manual_l3_w_
                    col = "black", 
                    max.overlaps = 100) +
   guides(colour = guide_legend(override.aes = list(size = 3))) +
-  scale_color_manual(values = manual_l3_colors, drop = F) +
-  scale_fill_manual(values = manual_l3_colors, drop = F) +
+  scale_color_manual(values = manual_l3_number_colors, drop = F) +
+  scale_fill_manual(values = manual_l3_number_colors, drop = F) +
   theme_minimal() +
   theme(panel.grid.major = element_blank(), 
         panel.grid.minor = element_blank(),
@@ -101,8 +104,8 @@ fig2B <- ggplot(masscytometry_umap_df, aes(x = UMAP_1, y = UMAP_2, col = manual_
                    col = "black", 
                    max.overlaps = 100) +
   guides(colour = guide_legend(override.aes = list(size = 3))) +
-  scale_color_manual(values = manual_l3_colors, drop = F) +
-  scale_fill_manual(values = manual_l3_colors, drop = F) +
+  scale_color_manual(values = manual_l3_number_colors, drop = F) +
+  scale_fill_manual(values = manual_l3_number_colors, drop = F) +
   theme_minimal() +
   theme(panel.grid.major = element_blank(), 
         panel.grid.minor = element_blank(),
@@ -288,6 +291,7 @@ masscytometry_itga4_expr_df <- data.frame(expr = assay(masscytometry_sce)[c("ITG
 
 scrnaseq_masscytometry_itga4_itgb7_itga4_expr_df <- scrnaseq_itga4_itgb7_expr_df %>%
   dplyr::select(UMAP_1, UMAP_2, expr_rank, expr, manual_l3, label) %>%
+  #dplyr::filter(expr>1) %>%
   dplyr::mutate(modality = "scRNAseq") %>%
   dplyr::add_row(masscytometry_itga4_expr_df %>%
                    dplyr::select(UMAP_1, UMAP_2, expr_rank, expr, manual_l3, label) %>%
@@ -295,9 +299,9 @@ scrnaseq_masscytometry_itga4_itgb7_itga4_expr_df <- scrnaseq_itga4_itgb7_expr_df
   dplyr::mutate(label = factor(label, levels = c("scRNAseq: ITGA4", "scRNAseq: ITGB7", "Mass cytometry: integrin a4")))
 
 fig2FG_left <- ggplot(scrnaseq_masscytometry_itga4_itgb7_itga4_expr_df, aes(x = UMAP_1, y = UMAP_2, order = expr_rank)) +
-  geom_point_rast(show.legend = F, size = 0.5, col = "#d3d3d3") +
+  geom_point_rast(show.legend = F, size = 0.25, col = "#d3d3d3") +
   geom_point_rast(data = scrnaseq_masscytometry_itga4_itgb7_itga4_expr_df %>%
-                    dplyr::filter(expr>0), aes(col = expr), show.legend = T, size = 0.5) +
+                    dplyr::filter(expr>0), aes(col = expr), show.legend = T, size = 0.25) +
   labs(y = "",
        x = "") +
   guides(colour = guide_legend(override.aes = list(size = 3),
@@ -314,10 +318,13 @@ fig2FG_left <- ggplot(scrnaseq_masscytometry_itga4_itgb7_itga4_expr_df, aes(x = 
         strip.text.x = element_text(face = "bold"))
 
 fig2FG_right <- ggplot(scrnaseq_masscytometry_itga4_itgb7_itga4_expr_df, aes(x = manual_l3, y = expr)) +
-  geom_jitter_rast(col = "#d3d3d3") +
-  geom_boxplot(alpha = 0.75, outlier.shape = NA) +
+  #geom_jitter_rast(col = "#d3d3d3") +
+  geom_jitter_rast(aes(col = manual_l3), alpha = 0.5) +
+  geom_boxplot(alpha = 0.75, outlier.shape = NA, aes(fill = manual_l3)) +
   facet_wrap(~label, nrow = 3, ncol = 1, scales = "free_y") +
   labs(y = "nUMIs") +
+  scale_color_manual(values = manual_l3_colors) +
+  scale_fill_manual(values = manual_l3_colors) +
   theme_bw() +
   theme(panel.grid.major = element_blank(), 
         panel.grid.minor = element_blank(),
@@ -326,7 +333,7 @@ fig2FG_right <- ggplot(scrnaseq_masscytometry_itga4_itgb7_itga4_expr_df, aes(x =
         strip.text.x = element_text(face = "bold"),
         axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
 
-fig2FG <- ggarrange(fig2FG_left, fig2FG_right, nrow = 1, ncol = 2, widths = c(0.75, 1), align = "hv")
+#fig2FG <- ggarrange(fig2FG_left, fig2FG_right, nrow = 1, ncol = 2, widths = c(0.75, 1), align = "hv")
 
 # Compiled
 
